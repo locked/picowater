@@ -33,9 +33,27 @@ pico_set_program_version(picowater ${CMAKE_PROJECT_VERSION})
 target_compile_definitions(picowater PRIVATE
         WIFI_SSID=\"${WIFI_SSID}\"
         WIFI_PASSWORD=\"${WIFI_PASSWORD}\"
+        SERVER_IP=\"${SERVER_IP}\"
+        SERVER_PORT=\"${SERVER_PORT}\"
 )
 
 target_sources(picowater PRIVATE)
+
+add_library(wifi
+       wifi.h
+       wifi.c
+)
+
+target_include_directories(wifi PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_LIST_DIR}
+        ${CMAKE_CURRENT_LIST_DIR}/..
+)
+
+target_link_libraries(wifi
+    pico_stdlib
+    pico_cyw43_arch_lwip_poll
+)
 
 target_include_directories(picowater PRIVATE
 	${CMAKE_CURRENT_LIST_DIR}
@@ -48,6 +66,7 @@ target_link_libraries(
     hardware_dma
     hardware_i2c
     pico_cyw43_arch_lwip_poll
+    wifi
 )
 
 pico_enable_stdio_usb(picowater 1)
