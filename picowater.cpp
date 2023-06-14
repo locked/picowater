@@ -38,6 +38,7 @@
 
 #define ADC_PIN 26
 
+#define RTC_POWER_PIN 10
 #define RTC_SQW_PIN 11
 #define RTC_SDA_PIN 12
 #define RTC_SCL_PIN 13
@@ -155,15 +156,16 @@ int main() {
 	gpio_put(LED_PIN, 1);
 
 	uart_puts(UART_ID, "==START==\r\n");
+    uart_default_tx_wait_blocking();
 
 	stdio_init_all();
-	sleep_ms(3000);
+	sleep_ms(1000);
 	printf("==START==\n");
-	uart_default_tx_wait_blocking();
 
 
 	// ADC
 	uart_puts(UART_ID, "== ADC read ==\r\n");
+    uart_default_tx_wait_blocking();
 	printf("==ADC read==\n");
 	//gpio_set_dir_all_bits(0);
 	//gpio_set_function(26, GPIO_FUNC_SIO);
@@ -175,12 +177,21 @@ int main() {
 	uint32_t result = adc_read();
 	const float conversion_factor = 3.3f / (1 << 12);
 	char buf[50] = "";
-	sprintf(buf, "\n0x%03x -> %f V\n", result, result * conversion_factor);
+	sprintf(buf, "\n0x%03x -> %f V\r\n", result, result * conversion_factor);
 	uart_puts(UART_ID, buf);
+    uart_default_tx_wait_blocking();
 	printf(buf);
 
 
 	// RTC (own lib)
+	uart_puts(UART_ID, "== RTC_poweron ==\r\n");
+    uart_default_tx_wait_blocking();
+	gpio_init(RTC_POWER_PIN);
+	gpio_set_dir(RTC_POWER_PIN, GPIO_OUT);
+	gpio_put(RTC_POWER_PIN, 1);
+
+	uart_puts(UART_ID, "== RTC_init ==\r\n");
+    uart_default_tx_wait_blocking();
     printf("RTC_init\n");
     _i2c_init(I2C_RTC_PORT, RTC_SDA_PIN, RTC_SCL_PIN, 100000);
 
@@ -199,6 +210,7 @@ int main() {
 
 	datetime_t dt;
 	int ret = dev_ds3231_getdatetime(I2C_RTC_PORT, &dt);
+	gpio_put(RTC_POWER_PIN, 0);
 	printf("[%d] %d-%d-%d %d:%d:%d dotw:%d\n", ret, dt.year, dt.month, dt.day, dt.hour, dt.min, dt.sec, dt.dotw);
 
     printf("Set alarm\n");
@@ -213,76 +225,22 @@ int main() {
 		t_alarm.sec = 60 - t_alarm.sec;
 	}
 	gpio_put(LED_PIN, 0);
-	printf("Go to sleep until: %d-%d-%d %d:%d:%d dotw:%d\n", t_alarm.year, t_alarm.month, t_alarm.day, t_alarm.hour, t_alarm.min, t_alarm.sec, t_alarm.dotw);
+	sprintf(buf, "Go to sleep until: %d-%d-%d %d:%d:%d dotw:%d\r\n", t_alarm.year, t_alarm.month, t_alarm.day, t_alarm.hour, t_alarm.min, t_alarm.sec, t_alarm.dotw);
+	uart_puts(UART_ID, buf);
+    uart_default_tx_wait_blocking();
+	printf(buf);
 	sleep_goto_sleep_until(&t_alarm, &sleep_callback);
 
+	uart_puts(UART_ID, "After sleep\r\n");
+    uart_default_tx_wait_blocking();
     printf("After sleep\n");
     recover_from_sleep(scb_orig, clock0_orig, clock1_orig);
 	gpio_put(LED_PIN, 1);
 
-	// RTC (dev/sys lib)
-    //int8_t buffer[30];
-    //int8_t buffer_time[30];
-    //int8_t buffer_date[30];
-    // init buffer
-    //memset(buffer_time, 0, sizeof(buffer_time));
-    //memset(buffer_date, 0, sizeof(buffer_date));
-    //printf("sys_init\n");
-    //sys_init();
-    // init i2c1 with pins and 100kHz
-    //printf("sys_i2c_init\n");
-    //sys_i2c_init(RTC_PORT, RTC_SDA_PIN, RTC_SCL_PIN, 100000, true);
-    //datetime_t dt;
-
-    //printf("dev_ds3231_getdatetime\n");
-    // get date time from DS3231 
-    //if (!dev_ds3231_getdatetime(RTC_PORT, &dt))
-    //    printf("Error on read DS3231");
-    //printf("sys_getrtc_format\n");
-	//sys_getrtc_format((int8_t*)"%H:%M:%S", buffer, sizeof(buffer));
-	//printf((char*)buffer);
-	//sys_getrtc_format((int8_t*)"%d.%m.%Y %a", buffer, sizeof(buffer));
-	//printf((char*)buffer);
-
-
-	// RTC (old lib)
-	/*
-    printf("DS3231 init\n");
-    i2c_inst_t *i2c   = i2c0;
-    i2c_init(i2c, 400000);
-    gpio_set_function(RTC_SDA_PIN, GPIO_FUNC_I2C);
-    gpio_pull_up(RTC_SDA_PIN);
-    gpio_set_function(RTC_SCL_PIN, GPIO_FUNC_I2C);
-    gpio_pull_up(RTC_SCL_PIN);
-    rtc_init();
-	DS3231_get_treg();
-
-    printf("DS3231 init8\n");
-    //DS3231_clear_a2f();
-    printf("DS3231 init9\n");
-    DS3231_init(DS3231_CONTROL_INTCN);
-
-    printf("DS3231 settime\n");
-    struct ts tset;
-    tset.year = 2023;
-    tset.mon = 6;
-    tset.mday = 4;
-    tset.wday = 1;
-    tset.hour = 11;
-    tset.min = 55;
-    tset.sec = 1;
-    DS3231_set(tset);
-
-    printf("DS3231 readtime\n");
-    ds3231_readtime();
-	sleep_ms(2000);
-    ds3231_readtime();
-	sleep_ms(2000);
-    ds3231_readtime();
-	*/
 
 	// WIFI
 	uart_puts(UART_ID, "== Wifi init ==\r\n");
+    uart_default_tx_wait_blocking();
 	printf("==Wifi init==\r\n");
 	wifi_connect(WIFI_SSID, WIFI_PASSWORD);
 
