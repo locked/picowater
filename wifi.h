@@ -11,6 +11,8 @@ void wifi_disconnect(void);
 void run_tcp_client_test(char* tcp_server_ip, int tcp_server_port);
 
 void run_udp_beacon(char* udp_server_ip, int udp_server_port);
+
+void send_udp(char* udp_server_ip, int udp_server_port, int data);
 #ifdef __cplusplus
 }
 #endif
