@@ -66,11 +66,6 @@
 #define DS3231_STATUS_EN32KHZ  0x08		/* Enable 32KHz Output  */
 #define DS3231_STATUS_OSF      0x80		/* Oscillator Stop Flag */
 
-// mutex for i2c
-//auto_init_mutex(i2c_mutex);
-//#define ENTER_SECTION mutex_enter_blocking(&i2c_mutex)
-//#define EXIT_SECTION  mutex_exit(&i2c_mutex);
-
 
 // convert BCD to number
 static inline uint8_t bcdnum(uint8_t bcd)
@@ -136,13 +131,13 @@ void i2c_write_bytes(i2c_inst_t* i2c, uint8_t addr, uint8_t *buf, int len) {
     i2c_write_timeout_us(i2c, I2C_DS3231_ADDR, buffer, len + 1, false, len * I2C_TIMEOUT_CHAR);
 };
 
-void DS3231_set_sreg(i2c_inst_t* i2c, const uint8_t val)
+void dev_ds3231_set_sreg(i2c_inst_t* i2c, const uint8_t val)
 {
     uint8_t buffer[1] = { val };
     i2c_write_bytes(i2c, DS3231_STATUS_ADDR, buffer, 1);
 }
 
-uint8_t DS3231_get_sreg(i2c_inst_t* i2c)
+uint8_t dev_ds3231_get_sreg(i2c_inst_t* i2c)
 {
     uint8_t buffer[1];
     i2c_read_timeout_us(i2c, DS3231_STATUS_ADDR, buffer, 1, false, I2C_TIMEOUT_CHAR);
@@ -153,8 +148,8 @@ void dev_ds3231_setalarm(i2c_inst_t* i2c, const uint8_t mi, const uint8_t h, con
 {
 	// Clear A2F
     uint8_t reg_val;
-    reg_val = DS3231_get_sreg(i2c) & ~DS3231_STATUS_A2F;
-    DS3231_set_sreg(i2c, reg_val);
+    reg_val = dev_ds3231_get_sreg(i2c) & ~DS3231_STATUS_A2F;
+    dev_ds3231_set_sreg(i2c, reg_val);
 
 
     uint8_t buffer[1] = { DS3231_CONTROL_INTCN };
@@ -192,10 +187,6 @@ void dev_ds3231_setalarm(i2c_inst_t* i2c, const uint8_t mi, const uint8_t h, con
 void _i2c_init(i2c_inst_t* i2c, uint32_t sda, uint32_t scl, uint32_t baudrate)
 {
     uint8_t idx = (i2c == i2c0) ? 0 : 1;
-   
-	//static uint32_t i2c_baudrate[] = {0, 0};
-    // init i2c
-    //i2c_baudrate[idx] = baudrate;
     
     i2c_init(i2c, baudrate);
 
@@ -215,27 +206,120 @@ static void sleep_callback(void) {
 }
 
 
-void recover_from_sleep(uint scb_orig, uint clock0_orig, uint clock1_orig){
-
-    //Re-enable ring Oscillator control
+void recover_from_sleep(uint scb_orig, uint clock0_orig, uint clock1_orig) {
+    // Re-enable ring Oscillator control
     rosc_write(&rosc_hw->ctrl, ROSC_CTRL_ENABLE_BITS);
-	//uart_puts(UART_ID, "Re-enabled ring Oscillator control\r\n");
-	//uart_default_tx_wait_blocking();
 
-    //reset procs back to default
+    // Reset procs back to default
     scb_hw->scr = scb_orig;
     clocks_hw->sleep_en0 = clock0_orig;
     clocks_hw->sleep_en1 = clock1_orig;
-	//uart_puts(UART_ID, "reseted procs back to default\r\n");
-	//uart_default_tx_wait_blocking();
 
-    //reset clocks
+    // Reset clocks
     clocks_init();
     //stdio_init_all();
-	//uart_puts(UART_ID, "reseted clocks\r\n");
-	//uart_default_tx_wait_blocking();
 
     return;
+}
+
+
+void setup_adc() {
+	uart_puts(UART_ID, "== ADC read ==\r\n");
+    uart_default_tx_wait_blocking();
+	printf("==ADC read==\n");
+	//gpio_set_dir_all_bits(0);
+	//gpio_set_function(26, GPIO_FUNC_SIO);
+	adc_init();
+    // Make sure GPIO is high-impedance, no pullups etc
+    adc_gpio_init(ADC_PIN);
+    // Select ADC input 0 (GPIO26)
+    adc_select_input(0);
+}
+
+
+void setup_rtc() {
+	char buf[50] = "";
+	uart_puts(UART_ID, "== RTC_poweron ==\r\n");
+    uart_default_tx_wait_blocking();
+	gpio_init(RTC_POWER_PIN);
+	gpio_set_dir(RTC_POWER_PIN, GPIO_OUT);
+	gpio_put(RTC_POWER_PIN, 1);
+
+	uart_puts(UART_ID, "== RTC_init ==\r\n");
+    uart_default_tx_wait_blocking();
+    printf("RTC_init\n");
+    _i2c_init(I2C_RTC_PORT, RTC_SDA_PIN, RTC_SCL_PIN, 100000);
+
+	/*
+	// To set time
+	datetime_t tset;
+    tset.year = 2023;
+    tset.month = 7;
+    tset.day = 12;
+    tset.dotw = 3;
+    tset.hour = 19;
+    tset.min = 41;
+    tset.sec = 0;
+    printf("Set date to external RTC\n");
+	dev_ds3231_setdatetime(I2C_RTC_PORT, &tset);
+	*/
+
+
+	// Fetch date from external RTC
+	datetime_t dt;
+	int ret = dev_ds3231_getdatetime(I2C_RTC_PORT, &dt);
+	gpio_put(RTC_POWER_PIN, 0);
+	sprintf(buf, "Get date from external RTC: [%d] %d-%02d-%02d %02d:%02d:%02d dotw:%d\r\n", ret, dt.year, dt.month, dt.day, dt.hour, dt.min, dt.sec, dt.dotw);
+	uart_puts(UART_ID, buf);
+	uart_default_tx_wait_blocking();
+	printf(buf);
+
+	uart_puts(UART_ID, "Set date to internal RTC\r\n");
+	uart_default_tx_wait_blocking();
+	printf("Set date to internal RTC\n");
+	rtc_init();
+	rtc_set_datetime(&dt);
+	sleep_us(64);	// datetime is not updated immediately when rtc_get_datetime() is called.
+}
+
+
+void add_water(uint loop_counter) {
+	char buf[50] = "";
+	// Read ADC
+	uint32_t result = adc_read();
+	const float conversion_factor = 3.3f / (1 << 12);
+	sprintf(buf, "\n0x%03x -> %f V\r\n", result, result * conversion_factor);
+	uart_puts(UART_ID, buf);
+	uart_default_tx_wait_blocking();
+	printf(buf);
+
+
+	// Activate motor if in the right time slot
+	gpio_put(MOTOR_PIN, 0);
+	sleep_ms(4000);
+	gpio_put(MOTOR_PIN, 1);
+
+
+	// WIFI
+	bool enable_wifi = true;
+	if (enable_wifi) {
+		uart_puts(UART_ID, "== Wifi connection ==\r\n");
+		uart_default_tx_wait_blocking();
+		printf("== Wifi connection ==\r\n");
+		wifi_connect(WIFI_SSID, WIFI_PASSWORD);
+		sleep_ms(100);
+
+		datetime_t dt;
+		rtc_get_datetime(&dt);
+		sprintf(buf, "C:[%d] TIME:[%d-%02d-%02d %02d:%02d:%02d] ADC:[%f]", loop_counter, dt.year, dt.month, dt.day, dt.hour, dt.min, dt.sec, result * conversion_factor);
+		int rt = send_udp(SERVER_IP, atoi(SERVER_PORT), buf);
+		sprintf(buf, "rt:[%d]\r\n", rt);
+		uart_puts(UART_ID, buf);
+		uart_default_tx_wait_blocking();
+
+		wifi_disconnect();
+		sleep_ms(50);
+	}
 }
 
 
@@ -271,63 +355,15 @@ int main() {
 
 
 	// ADC
-	uart_puts(UART_ID, "== ADC read ==\r\n");
-    uart_default_tx_wait_blocking();
-	printf("==ADC read==\n");
-	//gpio_set_dir_all_bits(0);
-	//gpio_set_function(26, GPIO_FUNC_SIO);
-	adc_init();
-    // Make sure GPIO is high-impedance, no pullups etc
-    adc_gpio_init(ADC_PIN);
-    // Select ADC input 0 (GPIO26)
-    adc_select_input(0);
+	setup_adc();
 
 
 	// RTC (own lib)
-	uart_puts(UART_ID, "== RTC_poweron ==\r\n");
-    uart_default_tx_wait_blocking();
-	gpio_init(RTC_POWER_PIN);
-	gpio_set_dir(RTC_POWER_PIN, GPIO_OUT);
-	gpio_put(RTC_POWER_PIN, 1);
+	setup_rtc();
 
-	uart_puts(UART_ID, "== RTC_init ==\r\n");
-    uart_default_tx_wait_blocking();
-    printf("RTC_init\n");
-    _i2c_init(I2C_RTC_PORT, RTC_SDA_PIN, RTC_SCL_PIN, 100000);
-
-	/*
-	// To set time
-	datetime_t tset;
-    tset.year = 2023;
-    tset.month = 7;
-    tset.day = 12;
-    tset.dotw = 3;
-    tset.hour = 19;
-    tset.min = 41;
-    tset.sec = 0;
-    printf("Set date to external RTC\n");
-	dev_ds3231_setdatetime(I2C_RTC_PORT, &tset);
-	*/
-
-
-	// Fetch date from external RTC
 	datetime_t dt;
-	int ret = dev_ds3231_getdatetime(I2C_RTC_PORT, &dt);
-	gpio_put(RTC_POWER_PIN, 0);
-	sprintf(buf, "Get date from external RTC: [%d] %d-%d-%d %d:%d:%d dotw:%d\r\n", ret, dt.year, dt.month, dt.day, dt.hour, dt.min, dt.sec, dt.dotw);
-	uart_puts(UART_ID, buf);
-	uart_default_tx_wait_blocking();
-	printf(buf);
-
-	uart_puts(UART_ID, "Set date to internal RTC\r\n");
-	uart_default_tx_wait_blocking();
-	printf("Set date to internal RTC\n");
-	rtc_init();
-	rtc_set_datetime(&dt);
-	sleep_us(64);	// datetime is not updated immediately when rtc_get_datetime() is called.
-
 	bool need_water = false;
-	int loop_counter = 0;
+	uint loop_counter = 0;
 	char datetime_buf[256];
     char *datetime_str = &datetime_buf[0];
 	while (1) {
@@ -348,48 +384,17 @@ int main() {
 		}
 		need_water = true;
 		if (need_water) {
-			// Read ADC
-			uint32_t result = adc_read();
-			const float conversion_factor = 3.3f / (1 << 12);
-			sprintf(buf, "\n0x%03x -> %f V\r\n", result, result * conversion_factor);
-			uart_puts(UART_ID, buf);
-			uart_default_tx_wait_blocking();
-			printf(buf);
-
-
-			// Activate motor if in the right time slot
-			gpio_put(MOTOR_PIN, 0);
-			sleep_ms(4000);
-			gpio_put(MOTOR_PIN, 1);
-
-
-			// WIFI
-			bool enable_wifi = true;
-			if (enable_wifi) {
-				uart_puts(UART_ID, "== Wifi connection ==\r\n");
-				uart_default_tx_wait_blocking();
-				printf("== Wifi connection ==\r\n");
-				wifi_connect(WIFI_SSID, WIFI_PASSWORD);
-
-				send_udp(SERVER_IP, atoi(SERVER_PORT), loop_counter);
-
-				loop_counter++;
-
-				wifi_disconnect();
-			}
+			add_water(loop_counter);
+			loop_counter++;
 		}
 
 		gpio_put(LED_PIN, 0);
 
 
-		// Alarm 10 seconds later
-		datetime_t t_alarm = dt;
-		// TODO: fix this
-		t_alarm.sec = t_alarm.sec + 90;
-		while (t_alarm.sec > 59) {
-			t_alarm.min += 1;
-			t_alarm.sec -= 60;
-		}
+		// Alarm xx seconds later
+		datetime_t t_alarm;
+		rtc_get_datetime(&t_alarm);
+		t_alarm.min += 1;
 		if (t_alarm.min > 59) {
 			t_alarm.hour += 1;
 			t_alarm.min -= 60;
