@@ -302,10 +302,10 @@ int send_udp(char* udp_server_ip, int udp_server_port, char* data) {
 		printf("Sent packet %s\n", data);
 	}
 
-	cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
-	sleep_ms(200);
-	cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
-	sleep_ms(200);
+	//cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
+	//sleep_ms(200);
+	//cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
+	//sleep_ms(200);
 
 	udp_remove(pcb);
 

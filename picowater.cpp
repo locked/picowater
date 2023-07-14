@@ -294,9 +294,9 @@ void add_water(uint loop_counter) {
 	printf(buf);
 
 
-	// Activate motor if in the right time slot
+	// Activate motor
 	gpio_put(MOTOR_PIN, 0);
-	sleep_ms(4000);
+	sleep_ms(6000);
 	gpio_put(MOTOR_PIN, 1);
 
 
@@ -307,13 +307,15 @@ void add_water(uint loop_counter) {
 		uart_default_tx_wait_blocking();
 		printf("== Wifi connection ==\r\n");
 		wifi_connect(WIFI_SSID, WIFI_PASSWORD);
-		sleep_ms(100);
+		sleep_ms(50);
 
 		datetime_t dt;
 		rtc_get_datetime(&dt);
 		sprintf(buf, "C:[%d] TIME:[%d-%02d-%02d %02d:%02d:%02d] ADC:[%f]", loop_counter, dt.year, dt.month, dt.day, dt.hour, dt.min, dt.sec, result * conversion_factor);
 		int rt = send_udp(SERVER_IP, atoi(SERVER_PORT), buf);
-		sprintf(buf, "rt:[%d]\r\n", rt);
+		sleep_ms(50);
+		int rt2 = send_udp(SERVER_IP, atoi(SERVER_PORT), buf);
+		sprintf(buf, "rt:[%d] rt2:[%d]\r\n", rt, rt2);
 		uart_puts(UART_ID, buf);
 		uart_default_tx_wait_blocking();
 
@@ -377,11 +379,11 @@ int main() {
 		gpio_put(LED_PIN, 1);
 
 
-		need_water = false;
+		/*need_water = false;
 		if (//dt.hour == 22 &&
 			(dt.min == 0 || dt.min == 10 || dt.min == 20 || dt.min == 30 || dt.min == 40 || dt.min == 50)) {
 			need_water = true;
-		}
+		}*/
 		need_water = true;
 		if (need_water) {
 			add_water(loop_counter);
@@ -394,11 +396,12 @@ int main() {
 		// Alarm xx seconds later
 		datetime_t t_alarm;
 		rtc_get_datetime(&t_alarm);
-		t_alarm.min += 1;
+		/*t_alarm.min += 1;
 		if (t_alarm.min > 59) {
 			t_alarm.hour += 1;
 			t_alarm.min -= 60;
-		}
+		}*/
+		t_alarm.hour += 1;
 		if (t_alarm.hour > 23) {
 			t_alarm.day += 1;
 			t_alarm.hour = t_alarm.hour - 24;
