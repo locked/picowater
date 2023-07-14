@@ -23,6 +23,11 @@
 
 #include "wifi.h"
 
+#include "rtc_ds3231.h"
+
+
+#define I2C_RTC_PORT i2c0
+
 // uart
 #define UART_ID uart0
 #define BAUD_RATE 115200
@@ -39,149 +44,6 @@
 #define RTC_SCL_PIN 13
 
 #define MOTOR_PIN 1
-
-#define I2C_RTC_PORT i2c0
-#define I2C_DS3231_ADDR 0x68
-#define I2C_TIMEOUT_CHAR 500
-
-#define DS3231_ALARM2_ADDR      0x0B
-#define DS3231_CONTROL_ADDR     0x0E
-#define DS3231_STATUS_ADDR      0x0F
-#define DS3231_TEMPERATURE_ADDR 0x11
-
-// control register bits
-#define DS3231_CONTROL_A1IE     0x1		/* Alarm 2 Interrupt Enable */
-#define DS3231_CONTROL_A2IE     0x2		/* Alarm 2 Interrupt Enable */
-#define DS3231_CONTROL_INTCN    0x4		/* Interrupt Control */
-#define DS3231_CONTROL_RS1	    0x8		/* square-wave rate select 2 */
-#define DS3231_CONTROL_RS2    	0x10	/* square-wave rate select 2 */
-#define DS3231_CONTROL_CONV    	0x20	/* Convert Temperature */
-#define DS3231_CONTROL_BBSQW    0x40	/* Battery-Backed Square-Wave Enable */
-#define DS3231_CONTROL_EOSC	    0x80	/* not Enable Oscillator, 0 equal on */
-
-// status register bits
-#define DS3231_STATUS_A1F      0x01		/* Alarm 1 Flag */
-#define DS3231_STATUS_A2F      0x02		/* Alarm 2 Flag */
-#define DS3231_STATUS_BUSY     0x04		/* device is busy executing TCXO */
-#define DS3231_STATUS_EN32KHZ  0x08		/* Enable 32KHz Output  */
-#define DS3231_STATUS_OSF      0x80		/* Oscillator Stop Flag */
-
-
-// convert BCD to number
-static inline uint8_t bcdnum(uint8_t bcd)
-{
-    return ((bcd/16) * 10) + (bcd % 16);
-}
-
-// convert number to BCD
-static inline uint8_t numbcd(uint8_t num)
-{
-    return ((num/10) * 16) + (num % 10);
-}
-
-bool dev_ds3231_setdatetime(i2c_inst_t* i2c, datetime_t *dt)
-{
-    uint8_t dt_buffer[8];
-    dt_buffer[0] = 0;
-    dt_buffer[1] = numbcd(dt->sec);
-    dt_buffer[2] = numbcd(dt->min);
-    dt_buffer[3] = numbcd(dt->hour);
-    dt_buffer[4] = numbcd(dt->dotw + 1);
-    dt_buffer[5] = numbcd(dt->day);
-    dt_buffer[6] = numbcd(dt->month);
-    dt_buffer[7] = numbcd(dt->year - 2000);
-
-    uint len = sizeof(dt_buffer);
-	return i2c_write_timeout_us(i2c, I2C_DS3231_ADDR, dt_buffer, len, false, len * I2C_TIMEOUT_CHAR) != len;
-}
-
-
-int dev_ds3231_getdatetime(i2c_inst_t* i2c, datetime_t *dt)
-{
-    uint8_t dt_buffer[7];
-    uint len = sizeof(dt_buffer);
-
-    //ENTER_SECTION;
-    int32_t ret = i2c_write_timeout_us(i2c, I2C_DS3231_ADDR, 0, 1, true, I2C_TIMEOUT_CHAR);
-    if (ret > 0)
-        ret = i2c_read_timeout_us(i2c, I2C_DS3231_ADDR, dt_buffer, len, false, len * I2C_TIMEOUT_CHAR);
-    //EXIT_SECTION;
-
-    if (ret != len)
-        return 1;
-
-    dt->sec = bcdnum(dt_buffer[0]);
-    dt->min = bcdnum(dt_buffer[1]);
-    dt->hour = bcdnum(dt_buffer[2]);
-    dt->dotw = bcdnum(dt_buffer[3]) - 1;
-    dt->day = bcdnum(dt_buffer[4]);
-    dt->month = bcdnum(dt_buffer[5] & 0x1F);
-    dt->year = bcdnum(dt_buffer[6]) + 2000;
-
-    return 0;
-}
-
-
-void i2c_write_bytes(i2c_inst_t* i2c, uint8_t addr, uint8_t *buf, int len) {
-    uint8_t buffer[len + 1];
-    buffer[0] = addr;
-    for(int x = 0; x < len; x++) {
-      buffer[x + 1] = buf[x];
-    }
-    i2c_write_timeout_us(i2c, I2C_DS3231_ADDR, buffer, len + 1, false, len * I2C_TIMEOUT_CHAR);
-};
-
-void dev_ds3231_set_sreg(i2c_inst_t* i2c, const uint8_t val)
-{
-    uint8_t buffer[1] = { val };
-    i2c_write_bytes(i2c, DS3231_STATUS_ADDR, buffer, 1);
-}
-
-uint8_t dev_ds3231_get_sreg(i2c_inst_t* i2c)
-{
-    uint8_t buffer[1];
-    i2c_read_timeout_us(i2c, DS3231_STATUS_ADDR, buffer, 1, false, I2C_TIMEOUT_CHAR);
-    return buffer[0];
-}
-
-void dev_ds3231_setalarm(i2c_inst_t* i2c, const uint8_t mi, const uint8_t h, const uint8_t d)
-{
-	// Clear A2F
-    uint8_t reg_val;
-    reg_val = dev_ds3231_get_sreg(i2c) & ~DS3231_STATUS_A2F;
-    dev_ds3231_set_sreg(i2c, reg_val);
-
-
-    uint8_t buffer[1] = { DS3231_CONTROL_INTCN };
-    i2c_write_bytes(i2c, DS3231_CONTROL_ADDR, buffer, 1);
-	uart_puts(UART_ID, "write to DS3231_CONTROL_ADDR (1) done\r\n");
-	uart_default_tx_wait_blocking();
-
-	// flags are: A2M2 (minutes), A2M3 (hour), A2M4 (day) 0 to enable, 1 to disable, DY/DT (dayofweek == 1/dayofmonth == 0) - 
-	uint8_t flags[4] = { 0, 1, 1, 1 };
-
-    // set Alarm2. only the minute is set since we ignore the hour and day component
-    uint8_t t[3] = { mi, h, d };
-    uint8_t send_t[3];
-    uint8_t i;
-
-    for (i = 0; i <= 2; i++) {
-        if (i == 2) {
-            send_t[i] = numbcd(t[2]) | (flags[2] << 7) | (flags[3] << 6);
-        } else {
-            send_t[i] = numbcd(t[i]) | (flags[i] << 7);
-		}
-    }
-    i2c_write_bytes(i2c, DS3231_ALARM2_ADDR, send_t, 3);
-	uart_puts(UART_ID, "write to DS3231_ALARM2_ADDR done\r\n");
-	uart_default_tx_wait_blocking();
-
-	// set control register to activate Alarm2 and enable Battery Backed SQW
-    buffer[0] = DS3231_CONTROL_INTCN | DS3231_CONTROL_A2IE; // | DS3231_CONTROL_BBSQW;
-    i2c_write_bytes(i2c, DS3231_CONTROL_ADDR, buffer, 1);
-	uart_puts(UART_ID, "write to DS3231_CONTROL_ADDR (2) done\r\n");
-	uart_default_tx_wait_blocking();
-}
 
 
 void _i2c_init(i2c_inst_t* i2c, uint32_t sda, uint32_t scl, uint32_t baudrate)
@@ -284,14 +146,21 @@ void setup_rtc() {
 
 
 void add_water(uint loop_counter) {
-	char buf[50] = "";
+	char buf[100] = "";
 	// Read ADC
-	uint32_t result = adc_read();
 	const float conversion_factor = 3.3f / (1 << 12);
-	sprintf(buf, "\n0x%03x -> %f V\r\n", result, result * conversion_factor);
+	float result = adc_read() * conversion_factor;
+	sprintf(buf, "ADC:[%fV]\r\n", result);
 	uart_puts(UART_ID, buf);
 	uart_default_tx_wait_blocking();
 	printf(buf);
+
+
+	// Temperature
+	float temperature = rtc_ds3231_get_temp(I2C_RTC_PORT);
+	sprintf(buf, "TEMP:[%f]\r\n", temperature);
+	uart_puts(UART_ID, buf);
+	uart_default_tx_wait_blocking();
 
 
 	// Activate motor
@@ -307,20 +176,25 @@ void add_water(uint loop_counter) {
 		uart_default_tx_wait_blocking();
 		printf("== Wifi connection ==\r\n");
 		wifi_connect(WIFI_SSID, WIFI_PASSWORD);
-		sleep_ms(50);
+		sleep_ms(100);
 
 		datetime_t dt;
 		rtc_get_datetime(&dt);
-		sprintf(buf, "C:[%d] TIME:[%d-%02d-%02d %02d:%02d:%02d] ADC:[%f]", loop_counter, dt.year, dt.month, dt.day, dt.hour, dt.min, dt.sec, result * conversion_factor);
-		int rt = send_udp(SERVER_IP, atoi(SERVER_PORT), buf);
-		sleep_ms(50);
-		int rt2 = send_udp(SERVER_IP, atoi(SERVER_PORT), buf);
-		sprintf(buf, "rt:[%d] rt2:[%d]\r\n", rt, rt2);
+		char sendbuf[100] = "";
+		//sprintf(sendbuf, "C:[%d] TIME:[%d-%02d-%02d %02d:%02d:%02d] ADC:[%f]", loop_counter, dt.year, dt.month, dt.day, dt.hour, dt.min, dt.sec, result);
+		sprintf(sendbuf, "C:[%d] TIME:[%d-%02d-%02d %02d:%02d:%02d] ADC:[%fV] TEMP:[%f]", loop_counter, dt.year, dt.month, dt.day, dt.hour, dt.min, dt.sec, result, temperature);
+		int rt = send_udp(SERVER_IP, atoi(SERVER_PORT), sendbuf);
+		sleep_ms(200);
+		int rt2 = send_udp(SERVER_IP, atoi(SERVER_PORT), sendbuf);
+		sprintf(buf, "rt:[%d] rt2:[%d] sent:[%s]\r\n", rt, rt2, sendbuf);
 		uart_puts(UART_ID, buf);
 		uart_default_tx_wait_blocking();
 
+		sleep_ms(10);
 		wifi_disconnect();
-		sleep_ms(50);
+		sleep_ms(10);
+		uart_puts(UART_ID, "Disconnected\r\n");
+		uart_default_tx_wait_blocking();
 	}
 }
 
@@ -363,6 +237,7 @@ int main() {
 	// RTC (own lib)
 	setup_rtc();
 
+
 	datetime_t dt;
 	bool need_water = false;
 	uint loop_counter = 0;
@@ -396,12 +271,16 @@ int main() {
 		// Alarm xx seconds later
 		datetime_t t_alarm;
 		rtc_get_datetime(&t_alarm);
-		/*t_alarm.min += 1;
-		if (t_alarm.min > 59) {
+		bool wakeup_everymin = true;
+		if (wakeup_everymin) {
+			t_alarm.min += 1;
+			if (t_alarm.min > 59) {
+				t_alarm.hour += 1;
+				t_alarm.min -= 60;
+			}
+		} else {
 			t_alarm.hour += 1;
-			t_alarm.min -= 60;
-		}*/
-		t_alarm.hour += 1;
+		}
 		if (t_alarm.hour > 23) {
 			t_alarm.day += 1;
 			t_alarm.hour = t_alarm.hour - 24;
@@ -410,22 +289,23 @@ int main() {
 			t_alarm.month += 1;
 			t_alarm.day = t_alarm.day - 30;
 		}
-		sprintf(buf, "Go to sleep until: %d-%d-%d %d:%d:%d dotw:%d\r\n", t_alarm.year, t_alarm.month, t_alarm.day, t_alarm.hour, t_alarm.min, t_alarm.sec, t_alarm.dotw);
+		sleep_ms(10);
+		sprintf(buf, "Sleep until: %d-%02d-%02d %02d:%02d:%02d\r\n", t_alarm.year, t_alarm.month, t_alarm.day, t_alarm.hour, t_alarm.min, t_alarm.sec);
 		uart_puts(UART_ID, buf);
 		uart_default_tx_wait_blocking();
-		printf(buf);
+
 		//sleep_goto_sleep_until(&t_alarm, &sleep_callback);
 		uart_puts(UART_ID, "Set alarm\r\n");
 		uart_default_tx_wait_blocking();
 		dev_ds3231_setalarm(I2C_RTC_PORT, t_alarm.min, t_alarm.hour, t_alarm.day);
+
 		uart_puts(UART_ID, "Alarm set (2)\r\n");
 		uart_default_tx_wait_blocking();
 		sleep_ms(10);
+
+		// Sleep until edge on SQW pin
 		sleep_goto_dormant_until_pin(RTC_SQW_PIN, true, false);
 
-		//uart_puts(UART_ID, "After sleep\r\n");
-		//uart_default_tx_wait_blocking();
-		//printf("After sleep\n");
 		recover_from_sleep(scb_orig, clock0_orig, clock1_orig);
 
 		uart_puts(UART_ID, "Recovered from sleep\r\n");

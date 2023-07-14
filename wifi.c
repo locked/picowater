@@ -306,6 +306,12 @@ int send_udp(char* udp_server_ip, int udp_server_port, char* data) {
 	//sleep_ms(200);
 	//cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
 	//sleep_ms(200);
+#if PICO_CYW43_ARCH_POLL
+        // if you are using pico_cyw43_arch_poll, then you must poll periodically from your
+        // main loop (not from a timer) to check for Wi-Fi driver or lwIP work that needs to be done.
+        cyw43_arch_poll();
+#endif
+	sleep_ms(600);
 
 	udp_remove(pcb);
 

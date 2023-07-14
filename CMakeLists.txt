@@ -60,13 +60,20 @@ target_link_libraries(wifi
 )
 
 
-# ds3232rtc
-#add_library(ds3232rtc ds3232rtc.cpp)
-#target_link_libraries(ds3232rtc hardware_i2c pico_stdlib pico_runtime )
-
-# ds3231
-#add_library(dev_ds3231 dev_ds3231.c)
-#target_link_libraries(dev_ds3231 hardware_i2c pico_stdlib pico_runtime )
+# rtc_ds3231
+add_library(rtc_ds3231
+       rtc_ds3231.h
+       rtc_ds3231.c
+)
+target_include_directories(rtc_ds3231 PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_LIST_DIR}
+        ${CMAKE_CURRENT_LIST_DIR}/..
+)
+target_link_libraries(rtc_ds3231
+    pico_stdlib
+    hardware_i2c
+)
 
 
 # main program
@@ -85,8 +92,7 @@ target_link_libraries(
     hardware_adc
     pico_cyw43_arch_lwip_poll
     wifi
-    #lib2_sys
-    #dev_ds3231
+    rtc_ds3231
 )
 
 pico_enable_stdio_usb(picowater 1)
