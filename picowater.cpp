@@ -49,11 +49,10 @@
 #define RTC_SDA_PIN 12
 #define RTC_SCL_PIN 13
 
-#define MOTOR_PIN 4
+#define PUMP_PIN 4
 
 
-void _i2c_init(i2c_inst_t* i2c, uint32_t sda, uint32_t scl, uint32_t baudrate)
-{
+void _i2c_init(i2c_inst_t* i2c, uint32_t sda, uint32_t scl, uint32_t baudrate) {
     uint8_t idx = (i2c == i2c0) ? 0 : 1;
     
     i2c_init(i2c, baudrate);
@@ -92,9 +91,9 @@ void recover_from_sleep(uint scb_orig, uint clock0_orig, uint clock1_orig) {
 
 
 void setup_adc() {
-	uart_puts(UART_ID, "== ADC read ==\r\n");
+	uart_puts(UART_ID, "== Setup ADC ==\r\n");
     uart_default_tx_wait_blocking();
-	printf("==ADC read==\n");
+	printf("== Setup ADC ==\n");
 	adc_init();
     // Make sure GPIO is high-impedance, no pullups etc
     adc_gpio_init(BATTERY_ADC_PIN);
@@ -246,15 +245,16 @@ void add_water(datetime_t dt, uint loop_counter) {
 		}
 	}
 
+
+	// Pump activation
 	if (activate_pump_ms > 0) {
 		sprintf(buf, "Activate pump for [%dms]\r\n", activate_pump_ms);
 		uart_puts(UART_ID, buf);
 		uart_default_tx_wait_blocking();
 		printf(buf);
-		// Activate motor
-		gpio_put(MOTOR_PIN, 0);
+		gpio_put(PUMP_PIN, 0);
 		sleep_ms(activate_pump_ms);
-		gpio_put(MOTOR_PIN, 1);
+		gpio_put(PUMP_PIN, 1);
 	}
 
 
@@ -282,8 +282,6 @@ void add_water(datetime_t dt, uint loop_counter) {
 		sleep_ms(10);
 		wifi_disconnect();
 		sleep_ms(10);
-		uart_puts(UART_ID, "Disconnected\r\n");
-		uart_default_tx_wait_blocking();
 	}
 }
 
@@ -299,24 +297,22 @@ int main() {
     uint clock0_orig = clocks_hw->sleep_en0;
     uint clock1_orig = clocks_hw->sleep_en1;
 
-
 	gpio_init(LED_PIN);
 	gpio_set_dir(LED_PIN, GPIO_OUT);
 	gpio_put(LED_PIN, 1);
 
-	gpio_init(MOTOR_PIN);
-	gpio_set_dir(MOTOR_PIN, GPIO_OUT);
-	gpio_put(MOTOR_PIN, 1);	// enable low
+	gpio_init(PUMP_PIN);
+	gpio_set_dir(PUMP_PIN, GPIO_OUT);
+	gpio_put(PUMP_PIN, 1);	// enable low
+
+	sleep_ms(1000);
 
 	uart_puts(UART_ID, "==START==\r\n");
     uart_default_tx_wait_blocking();
+	stdio_init_all();
+	printf("==START==\n");
 
 	gpio_pull_up(RTC_SQW_PIN);
-
-	stdio_init_all();
-	sleep_ms(2000);
-	gpio_put(LED_PIN, 0);
-	printf("==START==\n");
 
 	// Setup humidity sensor
 	setup_humidity();
@@ -329,6 +325,8 @@ int main() {
 
 	// RTC (own lib)
 	setup_rtc();
+
+	gpio_put(LED_PIN, 0);
 
 	datetime_t dt;
 	uint loop_counter = 0;
