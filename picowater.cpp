@@ -34,16 +34,22 @@
 #define UART_RX_PIN 17
 #define UART_TX_PIN 16
 
-#define LED_PIN 25
+#define LED_PIN 0
 
-#define ADC_PIN 26
+#define BATTERY_ADC_PIN 26
+
+#define HUMIDITY_POWER_PIN 3
+#define HUMIDITY_ADC_PIN 27
+
+#define DISTANCE_TRIG_PIN 1
+#define DISTANCE_ECHO_PIN 2
 
 #define RTC_POWER_PIN 10
 #define RTC_SQW_PIN 11
 #define RTC_SDA_PIN 12
 #define RTC_SCL_PIN 13
 
-#define MOTOR_PIN 1
+#define MOTOR_PIN 4
 
 
 void _i2c_init(i2c_inst_t* i2c, uint32_t sda, uint32_t scl, uint32_t baudrate)
@@ -89,13 +95,10 @@ void setup_adc() {
 	uart_puts(UART_ID, "== ADC read ==\r\n");
     uart_default_tx_wait_blocking();
 	printf("==ADC read==\n");
-	//gpio_set_dir_all_bits(0);
-	//gpio_set_function(26, GPIO_FUNC_SIO);
 	adc_init();
     // Make sure GPIO is high-impedance, no pullups etc
-    adc_gpio_init(ADC_PIN);
-    // Select ADC input 0 (GPIO26)
-    adc_select_input(0);
+    adc_gpio_init(BATTERY_ADC_PIN);
+    adc_gpio_init(HUMIDITY_ADC_PIN);
 }
 
 
@@ -112,21 +115,6 @@ void setup_rtc() {
     printf("RTC_init\n");
     _i2c_init(I2C_RTC_PORT, RTC_SDA_PIN, RTC_SCL_PIN, 100000);
 
-	/*
-	// To set time
-	datetime_t tset;
-    tset.year = 2023;
-    tset.month = 7;
-    tset.day = 12;
-    tset.dotw = 3;
-    tset.hour = 19;
-    tset.min = 41;
-    tset.sec = 0;
-    printf("Set date to external RTC\n");
-	dev_ds3231_setdatetime(I2C_RTC_PORT, &tset);
-	*/
-
-
 	// Fetch date from external RTC
 	datetime_t dt;
 	int ret = dev_ds3231_getdatetime(I2C_RTC_PORT, &dt);
@@ -136,37 +124,138 @@ void setup_rtc() {
 	uart_default_tx_wait_blocking();
 	printf(buf);
 
-	uart_puts(UART_ID, "Set date to internal RTC\r\n");
-	uart_default_tx_wait_blocking();
-	printf("Set date to internal RTC\n");
-	rtc_init();
-	rtc_set_datetime(&dt);
-	sleep_us(64);	// datetime is not updated immediately when rtc_get_datetime() is called.
+	if (dt.year < 2000) {
+		// To set time
+		dt.year = 2023;
+		dt.month = 7;
+		dt.day = 28;
+		dt.dotw = 3;
+		dt.hour = 19;
+		dt.min = 41;
+		dt.sec = 0;
+		printf("Set date to external RTC\n");
+		dev_ds3231_setdatetime(I2C_RTC_PORT, &dt);
+	}
+
+	if (dt.year > 2000) {
+		uart_puts(UART_ID, "Set date to internal RTC\r\n");
+		uart_default_tx_wait_blocking();
+		printf("Set date to internal RTC\n");
+		rtc_init();
+		rtc_set_datetime(&dt);
+		sleep_us(64);	// datetime is not updated immediately when rtc_get_datetime() is called.
+	}
 }
 
 
-void add_water(uint loop_counter) {
+void setup_humidity() {
+	gpio_init(HUMIDITY_POWER_PIN);
+	gpio_set_dir(HUMIDITY_POWER_PIN, GPIO_OUT);
+}
+
+
+void setup_distance() {
+	gpio_init(DISTANCE_ECHO_PIN);
+	gpio_init(DISTANCE_TRIG_PIN);
+	gpio_set_dir(DISTANCE_TRIG_PIN, GPIO_OUT);
+	gpio_set_dir(DISTANCE_ECHO_PIN, GPIO_IN);
+}
+
+uint64_t measure_distance() {
+	absolute_time_t pulse_start, pulse_end;
+	uint32_t loop_count = 0;
+	uint32_t loop_count2 = 0;
+	gpio_put(DISTANCE_TRIG_PIN, 0);
+	sleep_ms(100);
+	gpio_put(DISTANCE_TRIG_PIN, 1);
+	sleep_us(10);
+	gpio_put(DISTANCE_TRIG_PIN, 0);
+	while (gpio_get(DISTANCE_ECHO_PIN) == 0) tight_loop_contents();
+    pulse_start = get_absolute_time();
+	while (gpio_get(DISTANCE_ECHO_PIN) == 1) {
+		sleep_us(1);
+		loop_count2++;
+		if (loop_count2 > 30000) {
+			break;
+		}
+	}
+	pulse_end = get_absolute_time();
+	uint64_t pulse_duration = absolute_time_diff_us(pulse_start, pulse_end);
+	uint64_t distance = pulse_duration / 29 / 2;
 	char buf[100] = "";
-	// Read ADC
-	const float conversion_factor = 3.3f / (1 << 12);
-	float result = adc_read() * conversion_factor;
-	sprintf(buf, "ADC:[%fV]\r\n", result);
+	sprintf(buf, "pulse_start:[%u] pulse_end:[%u] pulse_duration:[%u] distance:[%u] loop_count:[%u/%u]\r\n", pulse_start, pulse_end, pulse_duration, distance, loop_count, loop_count2);
 	uart_puts(UART_ID, buf);
 	uart_default_tx_wait_blocking();
 	printf(buf);
+	return distance;
+}
 
+
+void add_water(datetime_t dt, uint loop_counter) {
+	char buf[100] = "";
+	// Read Battery and Humidity ADCs
+    adc_select_input(0); // Select ADC input 0 (GPIO26)
+	const float conversion_factor = 3.3f / (1 << 12);
+	float battery_result = adc_read() * conversion_factor;
+    adc_select_input(1); // Select ADC input 1 (GPIO27)
+    gpio_put(HUMIDITY_POWER_PIN, 1);
+	sleep_ms(10);
+	float humidity_result = adc_read() * conversion_factor;
+    gpio_put(HUMIDITY_POWER_PIN, 0);
+	sprintf(buf, "ADC Battery:[%fV] Humidity:[%fV]\r\n", battery_result, humidity_result);
+	uart_puts(UART_ID, buf);
+	uart_default_tx_wait_blocking();
+	printf(buf);
 
 	// Temperature
 	float temperature = rtc_ds3231_get_temp(I2C_RTC_PORT);
 	sprintf(buf, "TEMP:[%f]\r\n", temperature);
 	uart_puts(UART_ID, buf);
 	uart_default_tx_wait_blocking();
+	printf(buf);
 
+	// Water level
+	int dist = measure_distance();
+	sprintf(buf, "DIST:[%u]\r\n", dist);
+	uart_puts(UART_ID, buf);
+	uart_default_tx_wait_blocking();
+	printf(buf);
 
-	// Activate motor
-	gpio_put(MOTOR_PIN, 0);
-	sleep_ms(6000);
-	gpio_put(MOTOR_PIN, 1);
+	// Decide to activate pump or not
+	int activate_pump_ms = 0;
+	if (dt.hour >= 8 && dt.hour <= 21) {
+		sprintf(buf, "In time for pump:[%d]\r\n", dt.hour);
+		uart_puts(UART_ID, buf);
+		uart_default_tx_wait_blocking();
+		printf(buf);
+		if (dist < 14) {
+			sprintf(buf, "Enough water for pump:[%d]\r\n", dist);
+			uart_puts(UART_ID, buf);
+			uart_default_tx_wait_blocking();
+			printf(buf);
+			if (humidity_result >= 3.0) {
+				// Very dry
+				activate_pump_ms = 10000;
+			} else if (humidity_result >= 2.5) {
+				// A bit dry
+				activate_pump_ms = 7500;
+			} else if (humidity_result >= 2.0) {
+				// Not very dry
+				activate_pump_ms = 5000;
+			}
+		}
+	}
+
+	if (activate_pump_ms > 0) {
+		sprintf(buf, "Activate pump for [%dms]\r\n", activate_pump_ms);
+		uart_puts(UART_ID, buf);
+		uart_default_tx_wait_blocking();
+		printf(buf);
+		// Activate motor
+		gpio_put(MOTOR_PIN, 0);
+		sleep_ms(activate_pump_ms);
+		gpio_put(MOTOR_PIN, 1);
+	}
 
 
 	// WIFI
@@ -181,8 +270,8 @@ void add_water(uint loop_counter) {
 		datetime_t dt;
 		rtc_get_datetime(&dt);
 		char sendbuf[100] = "";
-		//sprintf(sendbuf, "C:[%d] TIME:[%d-%02d-%02d %02d:%02d:%02d] ADC:[%f]", loop_counter, dt.year, dt.month, dt.day, dt.hour, dt.min, dt.sec, result);
-		sprintf(sendbuf, "C:[%d] TIME:[%d-%02d-%02d %02d:%02d:%02d] ADC:[%fV] TEMP:[%f]", loop_counter, dt.year, dt.month, dt.day, dt.hour, dt.min, dt.sec, result, temperature);
+		sprintf(sendbuf, "[%d-%02d-%02d %02d:%02d:%02d] C:[%d] Bat:[%.2fV] Hum:[%.2fV] Temp:[%.2f] Water:[%d] Pump:[%d]",
+			dt.year, dt.month, dt.day, dt.hour, dt.min, dt.sec, loop_counter, battery_result, humidity_result, temperature, dist, activate_pump_ms);
 		int rt = send_udp(SERVER_IP, atoi(SERVER_PORT), sendbuf);
 		sleep_ms(200);
 		int rt2 = send_udp(SERVER_IP, atoi(SERVER_PORT), sendbuf);
@@ -225,25 +314,31 @@ int main() {
 	gpio_pull_up(RTC_SQW_PIN);
 
 	stdio_init_all();
-	sleep_ms(500);
+	sleep_ms(2000);
 	gpio_put(LED_PIN, 0);
 	printf("==START==\n");
 
+	// Setup humidity sensor
+	setup_humidity();
+
+	// Init water level
+	setup_distance();
 
 	// ADC
 	setup_adc();
 
-
 	// RTC (own lib)
 	setup_rtc();
 
-
 	datetime_t dt;
-	bool need_water = false;
 	uint loop_counter = 0;
 	char datetime_buf[256];
     char *datetime_str = &datetime_buf[0];
+	uart_puts(UART_ID, "Start loop\r\n");
+	uart_default_tx_wait_blocking();
 	while (1) {
+		gpio_put(LED_PIN, 1);
+
 		rtc_get_datetime(&dt);
 		datetime_to_str(datetime_str, sizeof(datetime_buf), &dt);
         sprintf(buf, "%s      \r\n", datetime_str);
@@ -251,27 +346,13 @@ int main() {
 		uart_default_tx_wait_blocking();
 		printf(buf);
 
-		gpio_put(LED_PIN, 1);
-
-
-		/*need_water = false;
-		if (//dt.hour == 22 &&
-			(dt.min == 0 || dt.min == 10 || dt.min == 20 || dt.min == 30 || dt.min == 40 || dt.min == 50)) {
-			need_water = true;
-		}*/
-		need_water = true;
-		if (need_water) {
-			add_water(loop_counter);
-			loop_counter++;
-		}
-
-		gpio_put(LED_PIN, 0);
-
+		add_water(dt, loop_counter);
+		loop_counter++;
 
 		// Alarm xx seconds later
 		datetime_t t_alarm;
 		rtc_get_datetime(&t_alarm);
-		bool wakeup_everymin = true;
+		bool wakeup_everymin = false;
 		if (wakeup_everymin) {
 			t_alarm.min += 1;
 			if (t_alarm.min > 59) {
@@ -301,6 +382,8 @@ int main() {
 
 		uart_puts(UART_ID, "Alarm set (2)\r\n");
 		uart_default_tx_wait_blocking();
+
+		gpio_put(LED_PIN, 0);
 		sleep_ms(10);
 
 		// Sleep until edge on SQW pin
