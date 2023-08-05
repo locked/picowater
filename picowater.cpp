@@ -222,25 +222,30 @@ void add_water(datetime_t dt, uint loop_counter) {
 
 	// Decide to activate pump or not
 	int activate_pump_ms = 0;
-	if (dt.hour >= 8 && dt.hour <= 21) {
+	// Every hour:
+	//int factor = 1;
+	//if (dt.hour >= 8 && dt.hour <= 21) {
+	// Morning and evening:
+	int factor = 2;
+	if (dt.hour == 8 || dt.hour == 20) {
 		sprintf(buf, "In time for pump:[%d]\r\n", dt.hour);
 		uart_puts(UART_ID, buf);
 		uart_default_tx_wait_blocking();
 		printf(buf);
-		if (dist < 14) {
+		if (dist >= 1 && dist <= 18) {
 			sprintf(buf, "Enough water for pump:[%d]\r\n", dist);
 			uart_puts(UART_ID, buf);
 			uart_default_tx_wait_blocking();
 			printf(buf);
-			if (humidity_result >= 3.0) {
+			if (humidity_result >= 2.5) {
 				// Very dry
-				activate_pump_ms = 10000;
-			} else if (humidity_result >= 2.5) {
+				activate_pump_ms = 10000 * factor;
+			} else if (humidity_result >= 2.25) {
 				// A bit dry
-				activate_pump_ms = 7500;
-			} else if (humidity_result >= 2.0) {
+				activate_pump_ms = 7500 * factor;
+			} else if (humidity_result >= 1.75) {
 				// Not very dry
-				activate_pump_ms = 5000;
+				activate_pump_ms = 5000 * factor;
 			}
 		}
 	}
