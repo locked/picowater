@@ -25,6 +25,12 @@
 
 #include "rtc_ds3231.h"
 
+#include "ssd1306.h"
+#include "acme_5_outlines_font.h"
+#include "bubblesstandard_font.h"
+#include "crackers_font.h"
+#include "BMSPA_font.h"
+
 
 #define I2C_RTC_PORT i2c0
 
@@ -38,28 +44,31 @@
 
 #define BATTERY_ADC_PIN 26
 
-#define HUMIDITY_POWER_PIN 3
+#define HUMIDITY_POWER_PIN 1 // 1 for v0.3, 3 for v0.2
 #define HUMIDITY_ADC_PIN 27
 
-#define DISTANCE_TRIG_PIN 1
-#define DISTANCE_ECHO_PIN 2
+#define DISTANCE_TRIG_PIN 4  // 4 for v0.3, 1 for v0.2
+#define DISTANCE_ECHO_PIN 5  // 5 for v0.3, 2 for v0.2
+
+#define SCREEN_SDA_PIN 2
+#define SCREEN_SCL_PIN 3
 
 #define RTC_POWER_PIN 10
-#define RTC_SQW_PIN 11
+#define RTC_SQW_PIN 14    // 14 for v0.3, 11 for v0.2
 #define RTC_SDA_PIN 12
 #define RTC_SCL_PIN 13
 
-#define PUMP_PIN 4
+#define PUMP_PIN 21       // 21 for v0.3, 4 for v0.2
 
 
 void _i2c_init(i2c_inst_t* i2c, uint32_t sda, uint32_t scl, uint32_t baudrate) {
-    uint8_t idx = (i2c == i2c0) ? 0 : 1;
-    
-    i2c_init(i2c, baudrate);
+	uint8_t idx = (i2c == i2c0) ? 0 : 1;
 
-    // init pins
-    gpio_set_function(sda, GPIO_FUNC_I2C);
-    gpio_set_function(scl, GPIO_FUNC_I2C);
+	i2c_init(i2c, baudrate);
+
+	// init pins
+	gpio_set_function(sda, GPIO_FUNC_I2C);
+	gpio_set_function(scl, GPIO_FUNC_I2C);
 
 	gpio_pull_up(sda);
 	gpio_pull_up(scl);
@@ -67,52 +76,64 @@ void _i2c_init(i2c_inst_t* i2c, uint32_t sda, uint32_t scl, uint32_t baudrate) {
 
 
 static void sleep_callback(void) {
-    printf("RTC woke us up\n");
+	printf("RTC woke us up\n");
 	uart_puts(UART_ID, "RTC woke us up\r\n");
 	uart_default_tx_wait_blocking();
 }
 
 
 void recover_from_sleep(uint scb_orig, uint clock0_orig, uint clock1_orig) {
-    // Re-enable ring Oscillator control
-    rosc_write(&rosc_hw->ctrl, ROSC_CTRL_ENABLE_BITS);
+	// Re-enable ring Oscillator control
+	rosc_write(&rosc_hw->ctrl, ROSC_CTRL_ENABLE_BITS);
 
-    // Reset procs back to default
-    scb_hw->scr = scb_orig;
-    clocks_hw->sleep_en0 = clock0_orig;
-    clocks_hw->sleep_en1 = clock1_orig;
+	// Reset procs back to default
+	scb_hw->scr = scb_orig;
+	clocks_hw->sleep_en0 = clock0_orig;
+	clocks_hw->sleep_en1 = clock1_orig;
 
-    // Reset clocks
-    clocks_init();
-    //stdio_init_all();
+	// Reset clocks
+	clocks_init();
+	//stdio_init_all();
 
-    return;
+	return;
+}
+
+
+void setup_screen(ssd1306_t *disp) {
+	i2c_init(i2c1, 400000);
+	gpio_set_function(SCREEN_SDA_PIN, GPIO_FUNC_I2C);
+	gpio_set_function(SCREEN_SCL_PIN, GPIO_FUNC_I2C);
+	gpio_pull_up(SCREEN_SDA_PIN);
+	gpio_pull_up(SCREEN_SCL_PIN);
+	disp->external_vcc = false;
+	ssd1306_init(disp, 128, 64, 0x3C, i2c1);
+	ssd1306_clear(disp);
 }
 
 
 void setup_adc() {
 	uart_puts(UART_ID, "== Setup ADC ==\r\n");
-    uart_default_tx_wait_blocking();
+	uart_default_tx_wait_blocking();
 	printf("== Setup ADC ==\n");
 	adc_init();
-    // Make sure GPIO is high-impedance, no pullups etc
-    adc_gpio_init(BATTERY_ADC_PIN);
-    adc_gpio_init(HUMIDITY_ADC_PIN);
+	// Make sure GPIO is high-impedance, no pullups etc
+	adc_gpio_init(BATTERY_ADC_PIN);
+	adc_gpio_init(HUMIDITY_ADC_PIN);
 }
 
 
 void setup_rtc() {
 	char buf[50] = "";
 	uart_puts(UART_ID, "== RTC_poweron ==\r\n");
-    uart_default_tx_wait_blocking();
+	uart_default_tx_wait_blocking();
 	gpio_init(RTC_POWER_PIN);
 	gpio_set_dir(RTC_POWER_PIN, GPIO_OUT);
 	gpio_put(RTC_POWER_PIN, 1);
 
 	uart_puts(UART_ID, "== RTC_init ==\r\n");
-    uart_default_tx_wait_blocking();
-    printf("RTC_init\n");
-    _i2c_init(I2C_RTC_PORT, RTC_SDA_PIN, RTC_SCL_PIN, 100000);
+	uart_default_tx_wait_blocking();
+	printf("RTC_init\n");
+	_i2c_init(I2C_RTC_PORT, RTC_SDA_PIN, RTC_SCL_PIN, 100000);
 
 	// Fetch date from external RTC
 	datetime_t dt;
@@ -123,14 +144,14 @@ void setup_rtc() {
 	uart_default_tx_wait_blocking();
 	printf(buf);
 
-	if (dt.year < 2000) {
+	if (dt.year <= 2000) {
 		// To set time
 		dt.year = 2023;
-		dt.month = 7;
-		dt.day = 28;
-		dt.dotw = 3;
+		dt.month = 8;
+		dt.day = 17;
+		dt.dotw = 4;
 		dt.hour = 19;
-		dt.min = 41;
+		dt.min = 38;
 		dt.sec = 0;
 		printf("Set date to external RTC\n");
 		dev_ds3231_setdatetime(I2C_RTC_PORT, &dt);
@@ -169,8 +190,14 @@ uint64_t measure_distance() {
 	gpio_put(DISTANCE_TRIG_PIN, 1);
 	sleep_us(10);
 	gpio_put(DISTANCE_TRIG_PIN, 0);
-	while (gpio_get(DISTANCE_ECHO_PIN) == 0) tight_loop_contents();
-    pulse_start = get_absolute_time();
+	while (gpio_get(DISTANCE_ECHO_PIN) == 0) {
+		//loop_count++;
+		if (loop_count++ > 3000000) {
+			break;
+		}
+	}
+	//tight_loop_contents();
+	pulse_start = get_absolute_time();
 	while (gpio_get(DISTANCE_ECHO_PIN) == 1) {
 		sleep_us(1);
 		loop_count2++;
@@ -193,14 +220,14 @@ uint64_t measure_distance() {
 void add_water(datetime_t dt, uint loop_counter) {
 	char buf[100] = "";
 	// Read Battery and Humidity ADCs
-    adc_select_input(0); // Select ADC input 0 (GPIO26)
+	adc_select_input(0); // Select ADC input 0 (GPIO26)
 	const float conversion_factor = 3.3f / (1 << 12);
 	float battery_result = adc_read() * conversion_factor;
-    adc_select_input(1); // Select ADC input 1 (GPIO27)
-    gpio_put(HUMIDITY_POWER_PIN, 1);
+	adc_select_input(1); // Select ADC input 1 (GPIO27)
+	gpio_put(HUMIDITY_POWER_PIN, 1);
 	sleep_ms(10);
 	float humidity_result = adc_read() * conversion_factor;
-    gpio_put(HUMIDITY_POWER_PIN, 0);
+	gpio_put(HUMIDITY_POWER_PIN, 0);
 	sprintf(buf, "ADC Battery:[%fV] Humidity:[%fV]\r\n", battery_result, humidity_result);
 	uart_puts(UART_ID, buf);
 	uart_default_tx_wait_blocking();
@@ -298,9 +325,9 @@ int main() {
 	gpio_set_function(UART_TX_PIN, GPIO_FUNC_UART);
 	gpio_set_function(UART_RX_PIN, GPIO_FUNC_UART);
 
-    uint scb_orig = scb_hw->scr;
-    uint clock0_orig = clocks_hw->sleep_en0;
-    uint clock1_orig = clocks_hw->sleep_en1;
+	uint scb_orig = scb_hw->scr;
+	uint clock0_orig = clocks_hw->sleep_en0;
+	uint clock1_orig = clocks_hw->sleep_en1;
 
 	gpio_init(LED_PIN);
 	gpio_set_dir(LED_PIN, GPIO_OUT);
@@ -313,11 +340,18 @@ int main() {
 	sleep_ms(1000);
 
 	uart_puts(UART_ID, "==START==\r\n");
-    uart_default_tx_wait_blocking();
+	uart_default_tx_wait_blocking();
 	stdio_init_all();
 	printf("==START==\n");
 
 	gpio_pull_up(RTC_SQW_PIN);
+
+	ssd1306_t disp;
+	setup_screen(&disp);
+	ssd1306_draw_line(&disp, 0, 0, 127, 0);
+	sprintf(buf, "start");
+	ssd1306_draw_string_with_font(&disp, 1, 1, 2, acme_font, buf);
+	ssd1306_show(&disp);
 
 	// Setup humidity sensor
 	setup_humidity();
@@ -336,15 +370,17 @@ int main() {
 	datetime_t dt;
 	uint loop_counter = 0;
 	char datetime_buf[256];
-    char *datetime_str = &datetime_buf[0];
+	char *datetime_str = &datetime_buf[0];
 	uart_puts(UART_ID, "Start loop\r\n");
 	uart_default_tx_wait_blocking();
 	while (1) {
 		gpio_put(LED_PIN, 1);
 
+		ssd1306_poweron(&disp);
+
 		rtc_get_datetime(&dt);
 		datetime_to_str(datetime_str, sizeof(datetime_buf), &dt);
-        sprintf(buf, "%s      \r\n", datetime_str);
+		sprintf(buf, "%s      \r\n", datetime_str);
 		uart_puts(UART_ID, buf);
 		uart_default_tx_wait_blocking();
 		printf(buf);
@@ -377,6 +413,8 @@ int main() {
 		sprintf(buf, "Sleep until: %d-%02d-%02d %02d:%02d:%02d\r\n", t_alarm.year, t_alarm.month, t_alarm.day, t_alarm.hour, t_alarm.min, t_alarm.sec);
 		uart_puts(UART_ID, buf);
 		uart_default_tx_wait_blocking();
+
+		ssd1306_poweroff(&disp);
 
 		//sleep_goto_sleep_until(&t_alarm, &sleep_callback);
 		uart_puts(UART_ID, "Set alarm\r\n");

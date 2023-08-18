@@ -76,6 +76,22 @@ target_link_libraries(rtc_ds3231
 )
 
 
+# ssd1306
+add_library(ssd1306
+       ssd1306.h
+       ssd1306.c
+)
+target_include_directories(ssd1306 PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_LIST_DIR}
+        ${CMAKE_CURRENT_LIST_DIR}/..
+)
+target_link_libraries(ssd1306
+    pico_stdlib
+    hardware_i2c
+)
+
+
 # main program
 target_include_directories(picowater PRIVATE
 	${CMAKE_CURRENT_LIST_DIR}
@@ -93,6 +109,7 @@ target_link_libraries(
     pico_cyw43_arch_lwip_poll
     wifi
     rtc_ds3231
+    ssd1306
 )
 
 pico_enable_stdio_usb(picowater 1)
