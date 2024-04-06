@@ -13,6 +13,9 @@ set(PICO_SDK_PATH "${CMAKE_SOURCE_DIR}/../pico-sdk")
 include(pico_sdk_import.cmake)
 include(pico_extras_import.cmake)
 
+#set(PICO_SENSORS_FETCH_FROM_GIT 1)
+include(pico_sensors_import.cmake)
+
 #include(pico_lib2_import.cmake)
 
 project(picowater
@@ -110,6 +113,7 @@ target_link_libraries(
     wifi
     rtc_ds3231
     ssd1306
+    sensor_PCF8563
 )
 
 pico_enable_stdio_usb(picowater 1)

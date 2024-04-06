@@ -31,6 +31,8 @@
 #include "crackers_font.h"
 #include "BMSPA_font.h"
 
+#include "sensor/PCF8563.h"
+
 
 #define I2C_RTC_PORT i2c0
 
@@ -42,23 +44,24 @@
 
 #define LED_PIN 0
 
-#define BATTERY_ADC_PIN 26
+#define BATTERY_ADC_PIN 26   // 26 v0.9
 
-#define HUMIDITY_POWER_PIN 1 // 1 for v0.3, 3 for v0.2
-#define HUMIDITY_ADC_PIN 27
+#define HUMIDITY_POWER_PIN 1 // 1  v0.9
+#define HUMIDITY_ADC_PIN 28  // 28 v0.9
 
-#define DISTANCE_TRIG_PIN 4  // 4 for v0.3, 1 for v0.2
-#define DISTANCE_ECHO_PIN 5  // 5 for v0.3, 2 for v0.2
+#define DISTANCE_TRIG_PIN 4  // 4 for v0.9, 4 for v0.3, 1 for v0.2
+#define DISTANCE_ECHO_PIN 5  // 5 for v0.9, 5 for v0.3, 2 for v0.2
 
-#define SCREEN_SDA_PIN 2
-#define SCREEN_SCL_PIN 3
+#define SCREEN_SDA_PIN 18    // 18 for v0.9
+#define SCREEN_SCL_PIN 19    // 19 for v0.9
 
-#define RTC_POWER_PIN 10
-#define RTC_SQW_PIN 14    // 14 for v0.3, 11 for v0.2
-#define RTC_SDA_PIN 12
-#define RTC_SCL_PIN 13
+#define RTC_POWER_PIN 10     // NC for v0.9, 10 for v0.3
+#define RTC_WORK_DONE_PIN 10 // 10 for v0.9
+#define RTC_SQW_PIN 14       // 14 for v0.9, 14 for v0.3, 11 for v0.2
+#define RTC_SDA_PIN 12       // 12 for v0.9, 12 for v0.3
+#define RTC_SCL_PIN 13       // 13 for v0.9, 13 for v0.3
 
-#define PUMP_PIN 21       // 21 for v0.3, 4 for v0.2
+#define PUMP_PIN 27          // 27 for v0.9, 21 for v0.3, 4 for v0.2
 
 
 void _i2c_init(i2c_inst_t* i2c, uint32_t sda, uint32_t scl, uint32_t baudrate) {
@@ -121,8 +124,79 @@ void setup_adc() {
 	adc_gpio_init(HUMIDITY_ADC_PIN);
 }
 
+Rtc_Pcf8563 rtc;
+void setup_rtc_pcf() {
+	uart_puts(UART_ID, "== RTC PCF8563 init ==\r\n");
+	uart_default_tx_wait_blocking();
+	printf("RTC PCF8563 init\n");
 
-void setup_rtc() {
+	//_i2c_init(I2C_RTC_PORT, RTC_SDA_PIN, RTC_SCL_PIN, 100000);
+	i2c_init(I2C_RTC_PORT, 100 * 1000);
+	gpio_set_function(RTC_SDA_PIN, GPIO_FUNC_I2C);
+	gpio_set_function(RTC_SCL_PIN, GPIO_FUNC_I2C);
+	gpio_pull_up(RTC_SDA_PIN);
+	gpio_pull_up(RTC_SCL_PIN);
+
+	rtc.begin(I2C_RTC_PORT);
+	//rtc.initClock();
+	//rtc.clearStatus();
+
+	rtc.getDateTime();
+	if (rtc.getCentury() != 0 || (rtc.getYear() < 20 || rtc.getYear() > 30)) {
+		printf("SET RTC century:%d year:%d\n", rtc.getCentury(), rtc.getYear());
+		rtc.setDateTime(1, 2, 3, false, 24, 4, 5, 6);
+	}
+	rtc.getDateTime();
+	sleep_us(64);
+
+	char buf[100] = "";
+	sprintf(buf, "Time: %s %s year:%d UTC\n", rtc.formatDate(RTCC_DATE_WORLD), rtc.formatTime(), rtc.getYear());
+	printf(buf);
+
+	uart_puts(UART_ID, "Set date to internal RTC\r\n");
+	uart_default_tx_wait_blocking();
+	printf("Set date to internal RTC\n");
+	rtc_init();
+	datetime_t dt;
+	dt.year = rtc.getYear();
+	dt.month = rtc.getMonth();
+	dt.day = rtc.getDay();
+	dt.hour = rtc.getHour();
+	dt.min = rtc.getMinute();
+	dt.sec = rtc.getSecond();
+	rtc_set_datetime(&dt);
+	sleep_us(64);	// datetime is not updated immediately when rtc_get_datetime() is called.
+
+	//rtc.setTimer(1, TMR_1MIN, true);
+	//rtc.enableTimer();
+}
+
+void rtc_pcf_sleep() {
+	printf("Will set ALARM\n");
+	uart_default_tx_wait_blocking();
+	sleep_ms(100);
+
+	rtc.getDateTime();
+	byte min = rtc.getMinute() + 1;
+	byte hour = rtc.getHour();
+	byte day = rtc.getDay();
+	byte weekday = rtc.getWeekday();
+
+	printf("Set ALARM to day:%d hour:%d min:%d\n", day, hour, min);
+	uart_default_tx_wait_blocking();
+	sleep_ms(100);
+
+	rtc.setAlarm(min, hour, day, weekday);
+	rtc.enableAlarm();
+
+	// shutdown PI through SN74HC74N
+	printf("SHUTDOWN in 2s\n");
+	uart_default_tx_wait_blocking();
+	sleep_ms(2000);
+	gpio_put(RTC_WORK_DONE_PIN, 1);
+}
+
+void setup_rtc_ds() {
 	char buf[50] = "";
 	uart_puts(UART_ID, "== RTC_poweron ==\r\n");
 	uart_default_tx_wait_blocking();
@@ -228,7 +302,7 @@ void add_water(datetime_t dt, uint loop_counter) {
 	sleep_ms(10);
 	float humidity_result = adc_read() * conversion_factor;
 	gpio_put(HUMIDITY_POWER_PIN, 0);
-	sprintf(buf, "ADC Battery:[%fV] Humidity:[%fV]\r\n", battery_result, humidity_result);
+	sprintf(buf, "POUET ADC Battery:[%fV] Humidity:[%fV]\r\n", battery_result, humidity_result);
 	uart_puts(UART_ID, buf);
 	uart_default_tx_wait_blocking();
 	printf(buf);
@@ -318,6 +392,18 @@ void add_water(datetime_t dt, uint loop_counter) {
 }
 
 
+void blink(int count, int delay) {
+	int i = 0;
+	gpio_put(LED_PIN, 0);
+	while (i < count) {
+		gpio_put(LED_PIN, 1);
+		sleep_ms(delay);
+		gpio_put(LED_PIN, 0);
+		i++;
+	}
+}
+
+
 int main() {
 	char buf[50] = "";
 
@@ -333,9 +419,16 @@ int main() {
 	gpio_set_dir(LED_PIN, GPIO_OUT);
 	gpio_put(LED_PIN, 1);
 
+	gpio_init(RTC_WORK_DONE_PIN);
+	gpio_set_dir(RTC_WORK_DONE_PIN, GPIO_OUT);
+	gpio_put(RTC_WORK_DONE_PIN, 0);
+
 	gpio_init(PUMP_PIN);
 	gpio_set_dir(PUMP_PIN, GPIO_OUT);
 	gpio_put(PUMP_PIN, 1);	// enable low
+	//gpio_put(PUMP_PIN, 0);
+	//sleep_ms(2000);
+	//gpio_put(PUMP_PIN, 1);
 
 	sleep_ms(1000);
 
@@ -346,12 +439,12 @@ int main() {
 
 	gpio_pull_up(RTC_SQW_PIN);
 
-	ssd1306_t disp;
-	setup_screen(&disp);
-	ssd1306_draw_line(&disp, 0, 0, 127, 0);
-	sprintf(buf, "start");
-	ssd1306_draw_string_with_font(&disp, 1, 1, 2, acme_font, buf);
-	ssd1306_show(&disp);
+	//ssd1306_t disp;
+	//setup_screen(&disp);
+	//ssd1306_draw_line(&disp, 0, 0, 127, 0);
+	//sprintf(buf, "start");
+	//ssd1306_draw_string_with_font(&disp, 1, 1, 2, acme_font, buf);
+	//ssd1306_show(&disp);
 
 	// Setup humidity sensor
 	setup_humidity();
@@ -362,8 +455,11 @@ int main() {
 	// ADC
 	setup_adc();
 
-	// RTC (own lib)
-	setup_rtc();
+	// RTC
+	//setup_rtc_ds();
+	setup_rtc_pcf();
+	blink(3, 50);
+	sleep_ms(500);
 
 	gpio_put(LED_PIN, 0);
 
@@ -374,19 +470,29 @@ int main() {
 	uart_puts(UART_ID, "Start loop\r\n");
 	uart_default_tx_wait_blocking();
 	while (1) {
-		gpio_put(LED_PIN, 1);
+		blink(2, 50);
+		sleep_ms(500);
 
-		ssd1306_poweron(&disp);
+		//ssd1306_poweron(&disp);
 
-		rtc_get_datetime(&dt);
-		datetime_to_str(datetime_str, sizeof(datetime_buf), &dt);
-		sprintf(buf, "%s      \r\n", datetime_str);
-		uart_puts(UART_ID, buf);
-		uart_default_tx_wait_blocking();
-		printf(buf);
+		//rtc_get_datetime(&dt);
+		//datetime_to_str(datetime_str, sizeof(datetime_buf), &dt);
+		//sprintf(buf, "%s      \r\n", datetime_str);
+		//uart_puts(UART_ID, buf);
+		//uart_default_tx_wait_blocking();
+		//printf(buf);
 
+		setup_rtc_pcf();
+
+		blink(2, 300);
+		sleep_ms(500);
 		add_water(dt, loop_counter);
+
 		loop_counter++;
+
+		rtc_pcf_sleep();
+
+		continue;
 
 		// Alarm xx seconds later
 		datetime_t t_alarm;
@@ -414,7 +520,7 @@ int main() {
 		uart_puts(UART_ID, buf);
 		uart_default_tx_wait_blocking();
 
-		ssd1306_poweroff(&disp);
+		//ssd1306_poweroff(&disp);
 
 		//sleep_goto_sleep_until(&t_alarm, &sleep_callback);
 		uart_puts(UART_ID, "Set alarm\r\n");
