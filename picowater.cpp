@@ -426,9 +426,14 @@ int main() {
 	gpio_init(PUMP_PIN);
 	gpio_set_dir(PUMP_PIN, GPIO_OUT);
 	gpio_put(PUMP_PIN, 1);	// enable low
-	//gpio_put(PUMP_PIN, 0);
-	//sleep_ms(2000);
-	//gpio_put(PUMP_PIN, 1);
+	sleep_ms(500);
+	gpio_put(PUMP_PIN, 0);
+	sleep_ms(500);
+	gpio_put(PUMP_PIN, 1);
+	sleep_ms(500);
+	gpio_put(PUMP_PIN, 0);
+	sleep_ms(500);
+	gpio_put(PUMP_PIN, 1);
 
 	sleep_ms(1000);
 
