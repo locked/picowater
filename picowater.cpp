@@ -206,7 +206,7 @@ void add_water(datetime_t *dt) {
 	adc_select_input(0); // Select ADC input 0 (GPIO26)
 	const float conversion_factor = 3.3f / (1 << 12);
 	float battery_result = adc_read() * conversion_factor;
-	adc_select_input(1); // Select ADC input 1 (GPIO27)
+	adc_select_input(2); // Select ADC input 1 (GPIO28)
 	gpio_put(HUMIDITY_POWER_PIN, 1);
 	sleep_ms(10);
 	float humidity_result = adc_read() * conversion_factor;
