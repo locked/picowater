@@ -40,8 +40,6 @@ pico_set_program_version(picowater ${CMAKE_PROJECT_VERSION})
 target_compile_definitions(picowater PRIVATE
         WIFI_SSID=\"${WIFI_SSID}\"
         WIFI_PASSWORD=\"${WIFI_PASSWORD}\"
-        SERVER_IP=\"${SERVER_IP}\"
-        SERVER_PORT=\"${SERVER_PORT}\"
         PICO_DEFAULT_LED_PIN=\"${PICO_DEFAULT_LED_PIN}\"
 )
 
