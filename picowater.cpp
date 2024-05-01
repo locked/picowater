@@ -95,7 +95,7 @@ void setup_rtc_pcf() {
 	//rtc.clearStatus();
 
 	rtc.getDateTime();
-	if (rtc.getCentury() != 0 || (rtc.getYear() < 20 || rtc.getYear() > 30)) {
+	if (rtc.getCentury() != 0 || (rtc.getYear() < 24 || rtc.getYear() > 28)) {
 		printf("SET RTC century:%d year:%d\n", rtc.getCentury(), rtc.getYear());
 
 		// Fetch date
@@ -134,16 +134,6 @@ void setup_rtc_pcf() {
 		byte second = json_getInteger(json_getProperty(date_elem, "second"));
 		printf("STATUS FROM SERVER:[%d] year:[%d] day:[%d] weekday:[%d] month:[%d]", status, year_full, day, weekday, month);
 
-		/*
-		byte day
-		byte weekday
-		byte month
-		bool century
-		byte year
-		byte hour
-		byte minute
-		byte sec
-		*/
 		rtc.setDateTime(day, weekday, month, century, year, hour, minute, second);
 	}
 }
@@ -349,24 +339,17 @@ void add_water(datetime_t *dt) {
 
 		char sendbuf[200] = "";
 		char response[200] = "";
-		sprintf(sendbuf, "[%d-%02d-%02d %02d:%02d:%02d] Bat:[%.2fV] Hum:[%.2fV] Temp:[%.2f] Water:[%d] Pump:[%d]\n",
+		sprintf(sendbuf, "{\"date\": \"%d-%02d-%02d %02d:%02d:%02d\", \"battery\": %.2f, \"humidity\": %.2f, \"temp\": %.2f, \"water\": %d, \"pump\": %d}\n",
 			dt->year, dt->month, dt->day, dt->hour, dt->min, dt->sec, battery_result, humidity_result, temperature, dist, activate_pump_ms);
 		send_tcp(SERVER_IP, SERVER_PORT, sendbuf, strlen(sendbuf), response);
 
 		printf(response);
 		uart_puts(UART_ID, response);
 		uart_default_tx_wait_blocking();
-		sleep_ms(5000);
 
-		//int rt = send_udp(SERVER_IP, SERVER_PORT, sendbuf);
-		//int rt2 = send_udp(SERVER_IP, SERVER_PORT, sendbuf);
-		//sprintf(buf, "rt:[%d] rt2:[%d] sent:[%s]\r\n", rt, rt2, sendbuf);
-		//uart_puts(UART_ID, buf);
-		//uart_default_tx_wait_blocking();
-
-		sleep_ms(10);
 		wifi_disconnect();
-		sleep_ms(10);
+
+		//sleep_ms(5000);
 	}
 }
 
@@ -438,11 +421,6 @@ int main() {
 
 	gpio_put(LED_PIN, 0);
 
-	//wifi_connect(WIFI_SSID, WIFI_PASSWORD);
-	//send_tcp(SERVER_IP, SERVER_PORT, "start\n");
-	//wifi_disconnect();
-	//sleep_ms(1000);
-
 	datetime_t dt;
 	char datetime_buf[256];
 	char *datetime_str = &datetime_buf[0];
@@ -456,8 +434,8 @@ int main() {
 
 		add_water(&dt);
 
-		sleep_ms(10000);
-		//rtc_pcf_sleep();
+		//sleep_ms(10000);
+		rtc_pcf_sleep();
 	}
 	return 0;
 }
