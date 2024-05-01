@@ -95,7 +95,7 @@ void setup_rtc_pcf() {
 	rtc.getDateTime();
 	if (rtc.getCentury() != 0 || (rtc.getYear() < 20 || rtc.getYear() > 30)) {
 		printf("SET RTC century:%d year:%d\n", rtc.getCentury(), rtc.getYear());
-		rtc.setDateTime(1, 2, 3, false, 24, 4, 5, 6);
+		rtc.setDateTime(28, 1, 4, false, 24, 18, 27, 0);
 	}
 }
 
@@ -132,10 +132,25 @@ void rtc_pcf_sleep() {
 	sleep_ms(100);
 
 	rtc.getDateTime();
-	byte min = rtc.getMinute() + 1;
+	byte min = rtc.getMinute();
 	byte hour = rtc.getHour();
 	byte day = rtc.getDay();
 	byte weekday = rtc.getWeekday();
+
+	bool wakeup_everymin = true;
+	if (wakeup_everymin) {
+		min += 1;
+		if (min > 59) {
+			hour += 1;
+			min -= 60;
+		}
+	} else {
+		hour += 1;
+	}
+	if (hour > 23) {
+		day += 1;
+		hour -= 24;
+	}
 
 	printf("Set ALARM to day:%d hour:%d min:%d\n", day, hour, min);
 	uart_default_tx_wait_blocking();
@@ -283,15 +298,16 @@ void add_water(datetime_t *dt) {
 		wifi_connect(WIFI_SSID, WIFI_PASSWORD);
 		sleep_ms(100);
 
-		char sendbuf[100] = "";
-		sprintf(sendbuf, "[%d-%02d-%02d %02d:%02d:%02d] Bat:[%.2fV] Hum:[%.2fV] Temp:[%.2f] Water:[%d] Pump:[%d]",
+		char sendbuf[200] = "";
+		sprintf(sendbuf, "[%d-%02d-%02d %02d:%02d:%02d] Bat:[%.2fV] Hum:[%.2fV] Temp:[%.2f] Water:[%d] Pump:[%d]\n",
 			dt->year, dt->month, dt->day, dt->hour, dt->min, dt->sec, battery_result, humidity_result, temperature, dist, activate_pump_ms);
-		int rt = send_udp(SERVER_IP, atoi(SERVER_PORT), sendbuf);
-		sleep_ms(200);
-		int rt2 = send_udp(SERVER_IP, atoi(SERVER_PORT), sendbuf);
-		sprintf(buf, "rt:[%d] rt2:[%d] sent:[%s]\r\n", rt, rt2, sendbuf);
-		uart_puts(UART_ID, buf);
-		uart_default_tx_wait_blocking();
+		send_tcp(SERVER_IP, SERVER_PORT, sendbuf, strlen(sendbuf));
+		sleep_ms(5000);
+		//int rt = send_udp(SERVER_IP, SERVER_PORT, sendbuf);
+		//int rt2 = send_udp(SERVER_IP, SERVER_PORT, sendbuf);
+		//sprintf(buf, "rt:[%d] rt2:[%d] sent:[%s]\r\n", rt, rt2, sendbuf);
+		//uart_puts(UART_ID, buf);
+		//uart_default_tx_wait_blocking();
 
 		sleep_ms(10);
 		wifi_disconnect();
@@ -367,6 +383,11 @@ int main() {
 
 	gpio_put(LED_PIN, 0);
 
+	//wifi_connect(WIFI_SSID, WIFI_PASSWORD);
+	//send_tcp(SERVER_IP, SERVER_PORT, "start\n");
+	//wifi_disconnect();
+	//sleep_ms(1000);
+
 	datetime_t dt;
 	char datetime_buf[256];
 	char *datetime_str = &datetime_buf[0];
@@ -376,18 +397,12 @@ int main() {
 		blink(2, 50);
 		sleep_ms(100);
 
-		//ssd1306_poweron(&disp);
-
 		set_dt_from_rtc_pcf(&dt);
-
-		blink(2, 300);
-		sleep_ms(3000);
 
 		add_water(&dt);
 
-		rtc_pcf_sleep();
-
-		// sleepUntil();	// Old method
+		sleep_ms(10000);
+		//rtc_pcf_sleep();
 	}
 	return 0;
 }

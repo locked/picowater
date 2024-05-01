@@ -96,19 +96,18 @@ static err_t tcp_client_sent(void *arg, struct tcp_pcb *tpcb, u16_t len) {
     state->sent_len += len;
 
     if (state->sent_len >= BUF_SIZE) {
-
         state->run_count++;
-        if (state->run_count >= TEST_ITERATIONS) {
-            tcp_result(arg, 0);
-            return ERR_OK;
-        }
+
+        tcp_result(arg, 0);
+        return ERR_OK;
 
         // We should receive a new buffer from the server
-        state->buffer_len = 0;
-        state->sent_len = 0;
-        DEBUG_printf("Waiting for buffer from server\n");
+        //state->buffer_len = 0;
+        //state->sent_len = 0;
+        //DEBUG_printf("Waiting for buffer from server\n");
     }
 
+    //tcp_result(arg, 0);
     return ERR_OK;
 }
 
@@ -146,6 +145,7 @@ err_t tcp_client_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err
     cyw43_arch_lwip_check();
     if (p->tot_len > 0) {
         DEBUG_printf("recv %d err %d\n", p->tot_len, err);
+        DEBUG_printf("buffer %s\n", p->payload, err);
         for (struct pbuf *q = p; q != NULL; q = q->next) {
             DUMP_BYTES(q->payload, q->len);
         }
@@ -157,15 +157,17 @@ err_t tcp_client_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err
     }
     pbuf_free(p);
 
+	tcp_result(state, 0);
+
     // If we have received the whole buffer, send it back to the server
-    if (state->buffer_len == BUF_SIZE) {
+    /*if (state->buffer_len == BUF_SIZE) {
         DEBUG_printf("Writing %d bytes to server\n", state->buffer_len);
         err_t err = tcp_write(tpcb, state->buffer, state->buffer_len, TCP_WRITE_FLAG_COPY);
         if (err != ERR_OK) {
             DEBUG_printf("Failed to write data %d\n", err);
             return tcp_result(arg, -1);
         }
-    }
+    }*/
     return ERR_OK;
 }
 
@@ -208,7 +210,7 @@ static TCP_CLIENT_T* tcp_client_init(char* tcp_server_ip) {
     return state;
 }
 
-void run_tcp_client_test(char* tcp_server_ip, int tcp_server_port) {
+void send_tcp(char* tcp_server_ip, int tcp_server_port, char* data, int data_len) {
     TCP_CLIENT_T *state = tcp_client_init(tcp_server_ip);
     if (!state) {
         return;
@@ -217,10 +219,19 @@ void run_tcp_client_test(char* tcp_server_ip, int tcp_server_port) {
         tcp_result(state, -1);
         return;
     }
+
+	DEBUG_printf("Sending [%s] to server\n", data);
+	err_t err = tcp_write(state->tcp_pcb, data, data_len, TCP_WRITE_FLAG_COPY);
+	if (err != ERR_OK) {
+		DEBUG_printf("Failed to write data %d\n", err);
+		return tcp_result(state, -1);
+	}
+
     while(!state->complete) {
         // the following #ifdef is only here so this same example can be used in multiple modes;
         // you do not need it in your code
 #if PICO_CYW43_ARCH_POLL
+		DEBUG_printf("IN PICO_CYW43_ARCH_POLL\n");
         // if you are using pico_cyw43_arch_poll, then you must poll periodically from your
         // main loop (not from a timer) to check for Wi-Fi driver or lwIP work that needs to be done.
         cyw43_arch_poll();
