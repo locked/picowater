@@ -93,6 +93,19 @@ target_link_libraries(ssd1306
 )
 
 
+# json-tiny
+add_library(tiny-json
+       tiny-json.h
+       tiny-json.c
+)
+target_include_directories(tiny-json PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+)
+target_link_libraries(tiny-json
+    pico_stdlib
+)
+
+
 # main program
 target_include_directories(picowater PRIVATE
 	${CMAKE_CURRENT_LIST_DIR}
@@ -112,6 +125,7 @@ target_link_libraries(
     rtc_ds3231
     ssd1306
     sensor_PCF8563
+    tiny-json
 )
 
 pico_enable_stdio_usb(picowater 1)

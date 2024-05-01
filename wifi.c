@@ -210,7 +210,7 @@ static TCP_CLIENT_T* tcp_client_init(char* tcp_server_ip) {
     return state;
 }
 
-void send_tcp(char* tcp_server_ip, int tcp_server_port, char* data, int data_len) {
+void send_tcp(char* tcp_server_ip, int tcp_server_port, char* data, int data_len, char* response) {
     TCP_CLIENT_T *state = tcp_client_init(tcp_server_ip);
     if (!state) {
         return;
@@ -231,7 +231,7 @@ void send_tcp(char* tcp_server_ip, int tcp_server_port, char* data, int data_len
         // the following #ifdef is only here so this same example can be used in multiple modes;
         // you do not need it in your code
 #if PICO_CYW43_ARCH_POLL
-		DEBUG_printf("IN PICO_CYW43_ARCH_POLL\n");
+		//DEBUG_printf("IN PICO_CYW43_ARCH_POLL\n");
         // if you are using pico_cyw43_arch_poll, then you must poll periodically from your
         // main loop (not from a timer) to check for Wi-Fi driver or lwIP work that needs to be done.
         cyw43_arch_poll();
@@ -245,6 +245,9 @@ void send_tcp(char* tcp_server_ip, int tcp_server_port, char* data, int data_len
         sleep_ms(1000);
 #endif
     }
+
+    strcpy(response, &state->buffer);
+
     free(state);
 }
 

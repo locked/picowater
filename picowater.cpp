@@ -33,6 +33,8 @@
 
 #include "sensor/PCF8563.h"
 
+#include "tiny-json.h"
+
 #include "picowater.h"
 
 
@@ -95,7 +97,54 @@ void setup_rtc_pcf() {
 	rtc.getDateTime();
 	if (rtc.getCentury() != 0 || (rtc.getYear() < 20 || rtc.getYear() > 30)) {
 		printf("SET RTC century:%d year:%d\n", rtc.getCentury(), rtc.getYear());
-		rtc.setDateTime(28, 1, 4, false, 24, 18, 27, 0);
+
+		// Fetch date
+		wifi_connect(WIFI_SSID, WIFI_PASSWORD);
+		char response[200] = "";
+		send_tcp(SERVER_IP, SERVER_PORT, "\n", 1, response);
+		printf("GOT DATE FROM SERVER:[%s]", response);
+		uart_puts(UART_ID, response);
+		uart_default_tx_wait_blocking();
+		wifi_disconnect();
+
+		enum { MAX_FIELDS = 12 };
+		json_t pool[MAX_FIELDS];
+
+		json_t const* root_elem = json_create(response, pool, MAX_FIELDS);
+		json_t const* status_elem = json_getProperty(root_elem, "status");
+		int status = json_getInteger(status_elem);
+		json_t const* date_elem = json_getProperty(root_elem, "date");
+		json_t const* year_elem = json_getProperty(date_elem, "year");
+		int year_full = json_getInteger(year_elem);
+		byte year;
+		bool century;
+		if (year_full >= 2000) {
+			year = year_full - 2000;
+			century = false;
+		} else {
+			year = year_full - 1900;
+			century = true;
+		}
+		json_t const* day_elem = json_getProperty(date_elem, "day");
+		byte day = json_getInteger(day_elem);
+		byte weekday = json_getInteger(json_getProperty(date_elem, "weekday"));
+		byte month = json_getInteger(json_getProperty(date_elem, "month"));
+		byte hour = json_getInteger(json_getProperty(date_elem, "hour"));
+		byte minute = json_getInteger(json_getProperty(date_elem, "minute"));
+		byte second = json_getInteger(json_getProperty(date_elem, "second"));
+		printf("STATUS FROM SERVER:[%d] year:[%d] day:[%d] weekday:[%d] month:[%d]", status, year_full, day, weekday, month);
+
+		/*
+		byte day
+		byte weekday
+		byte month
+		bool century
+		byte year
+		byte hour
+		byte minute
+		byte sec
+		*/
+		rtc.setDateTime(day, weekday, month, century, year, hour, minute, second);
 	}
 }
 
@@ -299,10 +348,16 @@ void add_water(datetime_t *dt) {
 		sleep_ms(100);
 
 		char sendbuf[200] = "";
+		char response[200] = "";
 		sprintf(sendbuf, "[%d-%02d-%02d %02d:%02d:%02d] Bat:[%.2fV] Hum:[%.2fV] Temp:[%.2f] Water:[%d] Pump:[%d]\n",
 			dt->year, dt->month, dt->day, dt->hour, dt->min, dt->sec, battery_result, humidity_result, temperature, dist, activate_pump_ms);
-		send_tcp(SERVER_IP, SERVER_PORT, sendbuf, strlen(sendbuf));
+		send_tcp(SERVER_IP, SERVER_PORT, sendbuf, strlen(sendbuf), response);
+
+		printf(response);
+		uart_puts(UART_ID, response);
+		uart_default_tx_wait_blocking();
 		sleep_ms(5000);
+
 		//int rt = send_udp(SERVER_IP, SERVER_PORT, sendbuf);
 		//int rt2 = send_udp(SERVER_IP, SERVER_PORT, sendbuf);
 		//sprintf(buf, "rt:[%d] rt2:[%d] sent:[%s]\r\n", rt, rt2, sendbuf);
