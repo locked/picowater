@@ -23,20 +23,21 @@
 
 #include "wifi.h"
 
-//#include "rtc_ds3231.h"
-
 #include "ssd1306.h"
 #include "acme_5_outlines_font.h"
 #include "bubblesstandard_font.h"
 #include "crackers_font.h"
 #include "BMSPA_font.h"
 
-#include "sensor/PCF8563.h"
+#include "pcf8563/pcf8563.h"
 
-#include "tiny-json.h"
+#include "network.h"
 
 #include "picowater.h"
 
+
+int pump_force_ms;
+bool wakeup_everymin;
 
 
 void _i2c_init(i2c_inst_t* i2c, uint32_t sda, uint32_t scl, uint32_t baudrate) {
@@ -52,6 +53,19 @@ void _i2c_init(i2c_inst_t* i2c, uint32_t sda, uint32_t scl, uint32_t baudrate) {
 	gpio_pull_up(scl);
 }
 
+
+
+void blink(int count, int delay) {
+	int i = 0;
+	gpio_put(LED_PIN, 0);
+	while (i < count) {
+		gpio_put(LED_PIN, 1);
+		sleep_ms(20);
+		gpio_put(LED_PIN, 0);
+		sleep_ms(delay);
+		i++;
+	}
+}
 
 
 void setup_screen(ssd1306_t *disp) {
@@ -77,7 +91,6 @@ void setup_adc() {
 }
 
 
-Rtc_Pcf8563 rtc;
 void setup_rtc_pcf() {
 	uart_puts(UART_ID, "== RTC PCF8563 init ==\r\n");
 	uart_default_tx_wait_blocking();
@@ -90,93 +103,29 @@ void setup_rtc_pcf() {
 	gpio_pull_up(RTC_SDA_PIN);
 	gpio_pull_up(RTC_SCL_PIN);
 
-	rtc.begin(I2C_RTC_PORT);
-	//rtc.initClock();
-	//rtc.clearStatus();
+	pcf8563_set_i2c(I2C_RTC_PORT);
+	printf("[picoclock] pcf8563_set_i2c OK\r\n");
 
-	rtc.getDateTime();
-	if (rtc.getCentury() != 0 || (rtc.getYear() < 24 || rtc.getYear() > 28)) {
-		printf("SET RTC century:%d year:%d\n", rtc.getCentury(), rtc.getYear());
+	time_struct _dt = pcf8563_getDateTime();
+	if (_dt.century != 0 || (_dt.year < 24 || _dt.year > 28)) {
+		printf("[%d] %d-%d-%d %d:%d:%d\n", _dt.century, _dt.year, _dt.month, _dt.day, _dt.hour, _dt.min, _dt.sec);
 
 		// Fetch date
-		wifi_connect(WIFI_SSID, WIFI_PASSWORD);
-		char response[200] = "";
-		send_tcp(SERVER_IP, SERVER_PORT, "\n", 1, response);
-		printf("GOT DATE FROM SERVER:[%s]", response);
-		uart_puts(UART_ID, response);
-		uart_default_tx_wait_blocking();
-		wifi_disconnect();
-
-		enum { MAX_FIELDS = 12 };
-		json_t pool[MAX_FIELDS];
-
-		json_t const* root_elem = json_create(response, pool, MAX_FIELDS);
-		json_t const* status_elem = json_getProperty(root_elem, "status");
-		int status = json_getInteger(status_elem);
-		json_t const* date_elem = json_getProperty(root_elem, "date");
-		json_t const* year_elem = json_getProperty(date_elem, "year");
-		int year_full = json_getInteger(year_elem);
-		byte year;
-		bool century;
-		if (year_full >= 2000) {
-			year = year_full - 2000;
-			century = false;
-		} else {
-			year = year_full - 1900;
-			century = true;
-		}
-		json_t const* day_elem = json_getProperty(date_elem, "day");
-		byte day = json_getInteger(day_elem);
-		byte weekday = json_getInteger(json_getProperty(date_elem, "weekday"));
-		byte month = json_getInteger(json_getProperty(date_elem, "month"));
-		byte hour = json_getInteger(json_getProperty(date_elem, "hour"));
-		byte minute = json_getInteger(json_getProperty(date_elem, "minute"));
-		byte second = json_getInteger(json_getProperty(date_elem, "second"));
-		printf("STATUS FROM SERVER:[%d] year:[%d] day:[%d] weekday:[%d] month:[%d]", status, year_full, day, weekday, month);
-
-		rtc.setDateTime(day, weekday, month, century, year, hour, minute, second);
+		network_update();
 	}
-}
-
-void set_dt_from_rtc_pcf(datetime_t *dt) {
-	rtc.getDateTime();
-	sleep_us(64);
-
-	char buf[100] = "";
-	sprintf(buf, "Time: %s %s year:%d UTC\n", rtc.formatDate(RTCC_DATE_WORLD), rtc.formatTime(), rtc.getYear());
-	printf(buf);
-
-	dt->year = rtc.getYear();
-	dt->month = rtc.getMonth();
-	dt->day = rtc.getDay();
-	dt->hour = rtc.getHour();
-	dt->min = rtc.getMinute();
-	dt->sec = rtc.getSecond();
-	/*
-	uart_puts(UART_ID, "Set date to internal RTC\r\n");
-	uart_default_tx_wait_blocking();
-	printf("Set date to internal RTC\n");
-	rtc_init();
-	rtc_set_datetime(dt);
-	sleep_us(64);	// datetime is not updated immediately when rtc_get_datetime() is called.
-	*/
-
-	//rtc.setTimer(1, TMR_1MIN, true);
-	//rtc.enableTimer();
 }
 
 void rtc_pcf_sleep() {
 	printf("Will set ALARM\n");
 	uart_default_tx_wait_blocking();
-	sleep_ms(100);
+	sleep_ms(500);
 
-	rtc.getDateTime();
-	byte min = rtc.getMinute();
-	byte hour = rtc.getHour();
-	byte day = rtc.getDay();
-	byte weekday = rtc.getWeekday();
+	time_struct dt = pcf8563_getDateTime();
+	int min = dt.min;
+	int hour = dt.hour;
+	int day = dt.day;
+	int weekday = dt.weekday;
 
-	bool wakeup_everymin = true;
 	if (wakeup_everymin) {
 		min += 1;
 		if (min > 59) {
@@ -195,8 +144,8 @@ void rtc_pcf_sleep() {
 	uart_default_tx_wait_blocking();
 	sleep_ms(100);
 
-	rtc.setAlarm(min, hour, day, weekday);
-	rtc.enableAlarm();
+	pcf8563_setAlarm(min, hour, day, weekday);
+	pcf8563_enableAlarm();
 
 	// shutdown PI through SN74HC74N
 	printf("SHUTDOWN\n");
@@ -255,6 +204,9 @@ uint64_t measure_distance() {
 
 
 void add_water(datetime_t *dt) {
+	blink(2, 100);
+	sleep_ms(1000);
+
 	char buf[100] = "";
 	// Read Battery and Humidity ADCs
 	adc_select_input(0); // Select ADC input 0 (GPIO26)
@@ -272,11 +224,6 @@ void add_water(datetime_t *dt) {
 
 	// Temperature
 	float temperature = 0;
-	/*float temperature = rtc_ds3231_get_temp(I2C_RTC_PORT);
-	sprintf(buf, "TEMP:[%f]\r\n", temperature);
-	uart_puts(UART_ID, buf);
-	uart_default_tx_wait_blocking();
-	printf(buf);*/
 
 	// Water level
 	int dist = measure_distance();
@@ -315,9 +262,28 @@ void add_water(datetime_t *dt) {
 		}
 	}
 
+	bool wakeup_everymin = false;
+
+	// WIFI
+	bool enable_wifi = true;
+	if (enable_wifi) {
+		blink(3, 100);
+		sleep_ms(1000);
+
+		network_update();
+
+		printf("pump_force:[%d] wakeup_everymin:[%d] activate_pump_ms:[%d]\n", pump_force_ms, wakeup_everymin, activate_pump_ms);
+
+		if (pump_force_ms > 0) {
+			activate_pump_ms = pump_force_ms;
+		}
+	}
+
 
 	// Pump activation
 	if (activate_pump_ms > 0) {
+		blink(5, 100);
+
 		sprintf(buf, "Activate pump for [%dms]\r\n", activate_pump_ms);
 		uart_puts(UART_ID, buf);
 		uart_default_tx_wait_blocking();
@@ -327,42 +293,7 @@ void add_water(datetime_t *dt) {
 		gpio_put(PUMP_PIN, 0);
 	}
 
-
-	// WIFI
-	bool enable_wifi = true;
-	if (enable_wifi) {
-		uart_puts(UART_ID, "== Wifi connection ==\r\n");
-		uart_default_tx_wait_blocking();
-		printf("== Wifi connection ==\r\n");
-		wifi_connect(WIFI_SSID, WIFI_PASSWORD);
-		sleep_ms(100);
-
-		char sendbuf[200] = "";
-		char response[200] = "";
-		sprintf(sendbuf, "{\"date\": \"%d-%02d-%02d %02d:%02d:%02d\", \"battery\": %.2f, \"humidity\": %.2f, \"temp\": %.2f, \"water\": %d, \"pump\": %d}\n",
-			dt->year, dt->month, dt->day, dt->hour, dt->min, dt->sec, battery_result, humidity_result, temperature, dist, activate_pump_ms);
-		send_tcp(SERVER_IP, SERVER_PORT, sendbuf, strlen(sendbuf), response);
-
-		printf(response);
-		uart_puts(UART_ID, response);
-		uart_default_tx_wait_blocking();
-
-		wifi_disconnect();
-
-		//sleep_ms(5000);
-	}
-}
-
-
-void blink(int count, int delay) {
-	int i = 0;
-	gpio_put(LED_PIN, 0);
-	while (i < count) {
-		gpio_put(LED_PIN, 1);
-		sleep_ms(delay);
-		gpio_put(LED_PIN, 0);
-		i++;
-	}
+	printf("add_water DONE\n");
 }
 
 
@@ -389,8 +320,6 @@ int main() {
 	gpio_set_dir(PUMP_PIN, GPIO_OUT);
 	gpio_put(PUMP_PIN, 0);
 
-	sleep_ms(1000);
-
 	uart_puts(UART_ID, "==START==\r\n");
 	uart_default_tx_wait_blocking();
 	stdio_init_all();
@@ -405,6 +334,15 @@ int main() {
 	//ssd1306_draw_string_with_font(&disp, 1, 1, 2, acme_font, buf);
 	//ssd1306_show(&disp);
 
+	// Test relay
+	gpio_put(PUMP_PIN, 1);
+	sleep_ms(2000);
+	gpio_put(PUMP_PIN, 0);
+	sleep_ms(2000);
+	gpio_put(PUMP_PIN, 1);
+	sleep_ms(2000);
+	gpio_put(PUMP_PIN, 0);
+
 	// Setup humidity sensor
 	setup_humidity();
 
@@ -416,8 +354,6 @@ int main() {
 
 	// RTC
 	setup_rtc_pcf();
-	blink(3, 50);
-	sleep_ms(100);
 
 	gpio_put(LED_PIN, 0);
 
@@ -427,15 +363,15 @@ int main() {
 	uart_puts(UART_ID, "Start loop\r\n");
 	uart_default_tx_wait_blocking();
 	while (1) {
-		blink(2, 50);
-		sleep_ms(100);
-
-		set_dt_from_rtc_pcf(&dt);
+		blink(1, 100);
+		sleep_ms(1000);
 
 		add_water(&dt);
 
-		//sleep_ms(10000);
+		printf("sleep\n");
 		rtc_pcf_sleep();
+		printf("sleep done (should never be seen)\n");
+		//sleep_ms(10000);
 	}
 	return 0;
 }
