@@ -2,4 +2,5 @@
   (version 7)
   (lib (name "picogus_library")(type "KiCad")(uri "${KIPRJMOD}/picogus_library.pretty")(options "")(descr ""))
   (lib (name "Lunasys_Library")(type "KiCad")(uri "${KIPRJMOD}/Lunasys_Library.pretty")(options "")(descr ""))
+  (lib (name "cell")(type "KiCad")(uri "${KIPRJMOD}/cell.pretty")(options "")(descr ""))
 )
