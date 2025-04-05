@@ -37,9 +37,9 @@
         "other_text_thickness": 0.15,
         "other_text_upright": false,
         "pads": {
-          "drill": 0.0,
-          "height": 2.6,
-          "width": 3.66
+          "drill": 3.2,
+          "height": 3.2,
+          "width": 3.2
         },
         "silk_line_width": 0.15,
         "silk_text_italic": false,
@@ -60,7 +60,7 @@
       ],
       "drc_exclusions": [
         [
-          "starved_thermal|97780000|76080000|c530176d-8dc7-4448-9d77-796603e8fe1e|16572237-7e83-4ccd-a16c-6d0cace98b39|B.Cu",
+          "text_height|127690000|85980000|fc487abe-34e2-4bae-9060-d238b2bfa98b|00000000-0000-0000-0000-000000000000",
           ""
         ]
       ],
@@ -94,7 +94,7 @@
         "items_not_allowed": "error",
         "length_out_of_range": "error",
         "lib_footprint_issues": "warning",
-        "lib_footprint_mismatch": "warning",
+        "lib_footprint_mismatch": "ignore",
         "malformed_courtyard": "error",
         "microvia_drill_out_of_range": "error",
         "mirrored_text_on_front_layer": "warning",
@@ -113,6 +113,7 @@
         "solder_mask_bridge": "error",
         "starved_thermal": "error",
         "text_height": "warning",
+        "text_on_edge_cuts": "error",
         "text_thickness": "warning",
         "through_hole_pad_without_hole": "error",
         "too_many_vias": "error",
@@ -510,7 +511,7 @@
       "plot": "",
       "pos_files": "",
       "specctra_dsn": "",
-      "step": "",
+      "step": "picowater.stl",
       "svg": "",
       "vrml": ""
     },
