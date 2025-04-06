@@ -23,10 +23,10 @@ module case () {
             cylinder(r=screw_hole_radius+4, h=6);
     }
 
-    translate([pcb_height+thickness, pcb_width-20, top_depth-2])
+    translate([pcb_height+thickness, pcb_width-21, top_depth-2])
     rotate([90, 180, 90])
     linear_extrude(thickness/3)
-    text("PicoWater", size=6);
+    text("PicoWater", size=5);
 }
 
 module screw_holes() {
@@ -42,13 +42,29 @@ module rj45() {
     rj45_posx = pcb_height / 2 - rj45[0] / 2;
     rj45_posz = top_depth - rj45[2] + 0.001;
     translate([rj45_posx, -thickness, rj45_posz]) cube(rj45);
+
+    translate([0, 8, rj45_posz]) rotate([0,0,90]) cube(rj45);
+    translate([0, 28, rj45_posz]) rotate([0,0,90]) cube(rj45);
+}
+
+module powerjack() {
+    powerjack_posx = 31.5;
+    powerjack_posz = top_depth - powerjack[2] + 0.001;
+    translate([height, powerjack_posx, powerjack_posz]) rotate([0,0,90]) cube(powerjack);
 }
 
 module debug_hole() {
     debug_posx = pcb_height + thickness;
-    debug_posy = pcb_width - 13;
+    debug_posy = 83;
     debug_posz = top_depth - 4;
     translate([debug_posx, debug_posy, debug_posz]) rotate([0, -90, 0]) cylinder(r=2, h=thickness);
+}
+
+module led_hole() {
+    led_posx = pcb_height + thickness;
+    led_posy = pcb_width - 14.5;
+    led_posz = top_depth - 0.99;
+    translate([0, led_posy, led_posz]) rotate([0, -90, 0]) cube([1, 2, thickness]);
 }
 
 module airvents() {
@@ -74,7 +90,9 @@ difference () {
     case();
     screw_holes();
     rj45();
+    powerjack();
     debug_hole();
+    led_hole();
     airvents();
     uart();
 }

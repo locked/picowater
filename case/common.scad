@@ -9,14 +9,14 @@ round_radius = 2;
 width = pcb_width + thickness * 2;	// y
 height = pcb_height + thickness * 2;	// x
 bottom_depth = 5;	// z
-top_depth = 26;		// z
+top_depth = 20;		// z
 
 screw_hole_radius = 1.1;	// M2/2
 screw_posx = 3.5;
 screw_posy = 3.5;
 
 rj45 = [16, thickness*2, 13.8];
-usb = [15, thickness*2, 9];
+powerjack = [10, thickness*2, 12];
 
 $fn = 50;
 
