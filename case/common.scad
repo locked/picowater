@@ -12,8 +12,8 @@ bottom_depth = 5;	// z
 top_depth = 20;		// z
 
 screw_hole_radius = 1.1;	// M2/2
-screw_posx = 3.5;
-screw_posy = 3.5;
+screw_posx = 4.5;
+screw_posy = 4.5;
 
 rj45 = [16, thickness*2, 13.8];
 powerjack = [10, thickness*2, 12];

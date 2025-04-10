@@ -16,17 +16,17 @@ module case () {
     // Screw supports
     for (hole = holes) {
         translate(hole)
-            cylinder(r=screw_hole_radius+2.5, h=bottom_depth);
+            cylinder(r=screw_hole_radius+3, h=bottom_depth);
     }
 }
 
 module screw_holes() {
     for (hole = holes) {
         translate([hole[0], hole[1], -thickness])
-            cylinder(r=screw_hole_radius, h=bottom_depth+thickness);
+            cylinder(r=screw_hole_radius+0.2, h=bottom_depth+thickness);
 
         translate([hole[0], hole[1], -bottom_depth+thickness])
-            cylinder(r=3.3, h=bottom_depth-thickness+3, $fn=6);
+            cylinder(r=2.4, h=bottom_depth-thickness+3, $fn=6);
     }
 }
 

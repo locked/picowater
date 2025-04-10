@@ -37,9 +37,9 @@
         "other_text_thickness": 0.15,
         "other_text_upright": false,
         "pads": {
-          "drill": 3.2,
-          "height": 3.2,
-          "width": 3.2
+          "drill": 4.3,
+          "height": 4.3,
+          "width": 4.3
         },
         "silk_line_width": 0.15,
         "silk_text_italic": false,
@@ -60,7 +60,7 @@
       ],
       "drc_exclusions": [
         [
-          "text_height|127690000|85980000|fc487abe-34e2-4bae-9060-d238b2bfa98b|00000000-0000-0000-0000-000000000000",
+          "starved_thermal|97780000|76080000|c530176d-8dc7-4448-9d77-796603e8fe1e|16572237-7e83-4ccd-a16c-6d0cace98b39|B.Cu",
           ""
         ]
       ],
@@ -94,7 +94,7 @@
         "items_not_allowed": "error",
         "length_out_of_range": "error",
         "lib_footprint_issues": "warning",
-        "lib_footprint_mismatch": "ignore",
+        "lib_footprint_mismatch": "warning",
         "malformed_courtyard": "error",
         "microvia_drill_out_of_range": "error",
         "mirrored_text_on_front_layer": "warning",

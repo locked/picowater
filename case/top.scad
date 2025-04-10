@@ -16,7 +16,7 @@ module case () {
     // Screw supports
     for (hole = holes) {
         translate([hole[0], hole[1], hole[2]+top_depth])
-            cylinder(r=pcb_screw_hole_radius-0.1, h=1.5);
+            cylinder(r=pcb_screw_hole_radius, h=1.5);
         translate(hole)
             cylinder(r=screw_hole_radius+2, h=top_depth);
         translate(hole)
