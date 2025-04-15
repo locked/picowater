@@ -2,6 +2,7 @@
 #include <time.h>
 
 #include "pico/unique_id.h"
+#include "hardware/watchdog.h"
 
 #include "network.h"
 #include "wifi.h"
@@ -12,27 +13,24 @@
 
 extern int pump_force_ms;
 extern bool wakeup_everymin;
+extern int dist;
+extern float batlvl;
 
 
 int get_response_from_server(char *response) {
-	//printf("Sleep a bit [0]...\r\n");
-    printf("Connecting to wifi [%s][%s]...\r\n", WIFI_SSID, WIFI_PASSWORD);
-	int ret = wifi_connect(WIFI_SSID, WIFI_PASSWORD);
-	//printf("Sleep a bit [1]...\r\n");
-    if (ret == 0) {
-        char board_id[20];
-		pico_get_unique_board_id_string(board_id, 20);
-        char query[100];
-        sprintf(query, "GET /clock.php?id=%s HTTP/1.0\r\nContent-Length: 0\r\n\r\n", board_id);
-        ret = send_tcp(SERVER_IP, 80, query, strlen(query), response);
-        //printf("RESPONSE FROM SERVER ret:[%d] Server:[%s:%d] => [%s]\r\n", ret, SERVER_IP, atoi(SERVER_PORT), response);
-        if (ret == 0 && strlen(response) < 10) {
-            ret = 1;
-        }
-    }
-	printf("Disconnect...\r\n");
-    wifi_disconnect();
-    printf("Disconnected from wifi, ret:[%d]\r\n", ret);
+	char board_id[20];
+	pico_get_unique_board_id_string(board_id, 20);
+
+	time_struct dt = pcf8563_getDateTime();
+
+	char query[100];
+	sprintf(query, "GET /water.php?id=%s&dist=%d&batlvl=%f&date=%d-%d-%dT%d:%d HTTP/1.0\r\nContent-Length: 0\r\n\r\n", board_id, dist, batlvl, dt.year, dt.month, dt.day, dt.hour, dt.min);
+	int ret = send_tcp(SERVER_IP, 80, query, strlen(query), response);
+	//printf("RESPONSE FROM SERVER ret:[%d] Server:[%s:%d] => [%s]\r\n", ret, SERVER_IP, atoi(SERVER_PORT), response);
+	if (ret == 0 && strlen(response) < 10) {
+		ret = 1;
+	}
+
     return ret;
 }
 
@@ -162,11 +160,25 @@ int parse_json_response(char *response) {
 
 
 void network_update() {
-	char http_buffer[4096] = "";
-	if (get_response_from_server(http_buffer) == 0) {
-		struct HttpResponse response;
-		if (parse_http_response(http_buffer, &response) == 0) {
-			parse_json_response(response.body);
+    printf("Connecting to wifi [%s][%s]...\r\n", WIFI_SSID, WIFI_PASSWORD);
+	int ret = wifi_connect(WIFI_SSID, WIFI_PASSWORD);
+    if (ret != 0) {
+		watchdog_update();
+		printf("Failed, wait a bit and retry connecting to wifi [%s][%s]...\r\n", WIFI_SSID, WIFI_PASSWORD);
+		wifi_disconnect();
+		sleep_ms(1500);
+		ret = wifi_connect(WIFI_SSID, WIFI_PASSWORD);
+	}
+    if (ret == 0) {
+		char http_buffer[4096] = "";
+		if (get_response_from_server(http_buffer) == 0) {
+			struct HttpResponse response;
+			if (parse_http_response(http_buffer, &response) == 0) {
+				parse_json_response(response.body);
+			}
 		}
 	}
+	printf("Disconnect...\r\n");
+    wifi_disconnect();
+    printf("Disconnected from wifi, ret:[%d]\r\n", ret);
 }

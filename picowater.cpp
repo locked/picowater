@@ -7,13 +7,11 @@
 #include "pico/sleep.h"
 
 #include "hardware/rtc.h"
-
 #include "hardware/uart.h"
-
 #include "hardware/gpio.h"
 #include "hardware/adc.h"
-
 #include "hardware/i2c.h"
+#include "hardware/watchdog.h"
 
 #include "pico/util/datetime.h"
 
@@ -38,6 +36,9 @@
 
 int pump_force_ms;
 bool wakeup_everymin;
+
+int dist;
+float batlvl;
 
 
 void _i2c_init(i2c_inst_t* i2c, uint32_t sda, uint32_t scl, uint32_t baudrate) {
@@ -111,7 +112,7 @@ void setup_rtc_pcf() {
 		printf("[%d] %d-%d-%d %d:%d:%d\n", _dt.century, _dt.year, _dt.month, _dt.day, _dt.hour, _dt.min, _dt.sec);
 
 		// Fetch date
-		network_update();
+		//network_update();
 	}
 }
 
@@ -166,9 +167,10 @@ void setup_distance() {
 	gpio_init(DISTANCE_TRIG_PIN);
 	gpio_set_dir(DISTANCE_TRIG_PIN, GPIO_OUT);
 	gpio_set_dir(DISTANCE_ECHO_PIN, GPIO_IN);
+	gpio_pull_down(DISTANCE_ECHO_PIN);
 }
 
-uint64_t measure_distance() {
+int measure_distance() {
 	absolute_time_t pulse_start, pulse_end;
 	uint32_t loop_count = 0;
 	uint32_t loop_count2 = 0;
@@ -179,6 +181,7 @@ uint64_t measure_distance() {
 	gpio_put(DISTANCE_TRIG_PIN, 0);
 	while (gpio_get(DISTANCE_ECHO_PIN) == 0) {
 		if (loop_count++ > 3000000) {
+			printf("exit loop\r\n");
 			break;
 		}
 	}
@@ -188,36 +191,36 @@ uint64_t measure_distance() {
 		sleep_us(1);
 		loop_count2++;
 		if (loop_count2 > 30000) {
+			printf("exit loop2\r\n");
 			break;
 		}
 	}
 	pulse_end = get_absolute_time();
-	uint64_t pulse_duration = absolute_time_diff_us(pulse_start, pulse_end);
-	uint64_t distance = pulse_duration / 29 / 2;
+	int64_t pulse_duration = absolute_time_diff_us(pulse_start, pulse_end);
+	int distance = pulse_duration / 29 / 2;
 	char buf[100] = "";
-	sprintf(buf, "pulse_start:[%u] pulse_end:[%u] pulse_duration:[%u] distance:[%u] loop_count:[%u/%u]\r\n", pulse_start, pulse_end, pulse_duration, distance, loop_count, loop_count2);
+	sprintf(buf, "distance:[%d] loop_count:[%u/%u] pulse_start:[%u] pulse_end:[%u] pulse_duration:[%l]\r\n", distance, loop_count, loop_count2, pulse_start, pulse_end, pulse_duration);
 	uart_puts(UART_ID, buf);
 	uart_default_tx_wait_blocking();
 	printf(buf);
 	return distance;
 }
 
-
 void add_water(datetime_t *dt) {
-	blink(2, 100);
-	sleep_ms(1000);
+	//blink(2, 100);
+	//sleep_ms(1000);
 
 	char buf[100] = "";
 	// Read Battery and Humidity ADCs
 	adc_select_input(0); // Select ADC input 0 (GPIO26)
 	const float conversion_factor = 3.3f / (1 << 12);
-	float battery_result = adc_read() * conversion_factor;
+	batlvl = adc_read() * conversion_factor;
 	adc_select_input(2); // Select ADC input 1 (GPIO28)
 	gpio_put(HUMIDITY_POWER_PIN, 1);
 	sleep_ms(10);
 	float humidity_result = adc_read() * conversion_factor;
 	gpio_put(HUMIDITY_POWER_PIN, 0);
-	sprintf(buf, "POUET ADC Battery:[%fV] Humidity:[%fV]\r\n", battery_result, humidity_result);
+	sprintf(buf, "POUET ADC Battery:[%fV] Humidity:[%fV]\r\n", batlvl, humidity_result);
 	uart_puts(UART_ID, buf);
 	uart_default_tx_wait_blocking();
 	printf(buf);
@@ -225,12 +228,19 @@ void add_water(datetime_t *dt) {
 	// Temperature
 	float temperature = 0;
 
+	watchdog_update();
 	// Water level
-	int dist = measure_distance();
+	dist = measure_distance();
+	if (dist <= 0) {
+		printf("Failed getting distance:[%d]\r\n", dist);
+		sleep_ms(500);
+		dist = measure_distance();
+	}
 	sprintf(buf, "DIST:[%u]\r\n", dist);
 	uart_puts(UART_ID, buf);
 	uart_default_tx_wait_blocking();
 	printf(buf);
+	watchdog_update();
 
 	// Decide to activate pump or not
 	int activate_pump_ms = 0;
@@ -271,6 +281,7 @@ void add_water(datetime_t *dt) {
 		sleep_ms(1000);
 
 		network_update();
+		watchdog_update();
 
 		printf("pump_force:[%d] wakeup_everymin:[%d] activate_pump_ms:[%d]\n", pump_force_ms, wakeup_everymin, activate_pump_ms);
 
@@ -292,6 +303,7 @@ void add_water(datetime_t *dt) {
 		sleep_ms(activate_pump_ms);
 		gpio_put(PUMP_PIN, 0);
 	}
+	watchdog_update();
 
 	printf("add_water DONE\n");
 }
@@ -334,14 +346,7 @@ int main() {
 	//ssd1306_draw_string_with_font(&disp, 1, 1, 2, acme_font, buf);
 	//ssd1306_show(&disp);
 
-	// Test relay
-	gpio_put(PUMP_PIN, 1);
-	sleep_ms(2000);
-	gpio_put(PUMP_PIN, 0);
-	sleep_ms(2000);
-	gpio_put(PUMP_PIN, 1);
-	sleep_ms(2000);
-	gpio_put(PUMP_PIN, 0);
+	watchdog_enable(30000, false);
 
 	// Setup humidity sensor
 	setup_humidity();
@@ -354,6 +359,7 @@ int main() {
 
 	// RTC
 	setup_rtc_pcf();
+	watchdog_update();
 
 	gpio_put(LED_PIN, 0);
 
@@ -363,13 +369,14 @@ int main() {
 	uart_puts(UART_ID, "Start loop\r\n");
 	uart_default_tx_wait_blocking();
 	while (1) {
-		blink(1, 100);
-		sleep_ms(1000);
+		//blink(1, 100);
+		//sleep_ms(1000);
 
 		add_water(&dt);
 
 		printf("sleep\n");
 		rtc_pcf_sleep();
+		sleep_ms(500);
 		printf("sleep done (should never be seen)\n");
 		//sleep_ms(10000);
 	}
