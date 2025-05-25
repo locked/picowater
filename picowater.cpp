@@ -138,10 +138,17 @@ void rtc_pcf_sleep() {
 	}
 	if (hour > 23) {
 		day += 1;
+		weekday += 1;
 		hour -= 24;
 	}
+	if (day > 30) {
+		day -= 30;
+	}
+	if (weekday > 6) {
+		weekday = 0;
+	}
 
-	printf("Set ALARM to day:%d hour:%d min:%d\n", day, hour, min);
+	printf("Set ALARM to day %02d at %02d:%02d weekday:%d\n", day, hour, min, weekday);
 	uart_default_tx_wait_blocking();
 	sleep_ms(100);
 
@@ -175,7 +182,7 @@ int measure_distance() {
 	uint32_t loop_count = 0;
 	uint32_t loop_count2 = 0;
 	gpio_put(DISTANCE_TRIG_PIN, 0);
-	sleep_ms(100);
+	sleep_ms(200);
 	gpio_put(DISTANCE_TRIG_PIN, 1);
 	sleep_us(10);
 	gpio_put(DISTANCE_TRIG_PIN, 0);
@@ -233,7 +240,7 @@ void add_water(datetime_t *dt) {
 	dist = measure_distance();
 	if (dist <= 0) {
 		printf("Failed getting distance:[%d]\r\n", dist);
-		sleep_ms(500);
+		sleep_ms(1000);
 		dist = measure_distance();
 	}
 	sprintf(buf, "DIST:[%u]\r\n", dist);
@@ -242,14 +249,17 @@ void add_water(datetime_t *dt) {
 	printf(buf);
 	watchdog_update();
 
+	// shutdown power for ext devices (except pump)
+	gpio_put(EXT_POWER_PIN, 0);
+
 	// Decide to activate pump or not
 	int activate_pump_ms = 0;
 	// Every hour:
 	//int factor = 1;
 	//if (dt->hour >= 8 && dt->hour <= 21) {
 	// Morning and evening:
-	int factor = 2;
-	if (dt->hour == 8 || dt->hour == 20) {
+	/*int factor = 2;
+	if (dt->hour == 8 || dt->hour == 21) {
 		sprintf(buf, "In time for pump:[%d]\r\n", dt->hour);
 		uart_puts(UART_ID, buf);
 		uart_default_tx_wait_blocking();
@@ -270,7 +280,7 @@ void add_water(datetime_t *dt) {
 				activate_pump_ms = 5000 * factor;
 			}
 		}
-	}
+	}*/
 
 	bool wakeup_everymin = false;
 
@@ -300,7 +310,9 @@ void add_water(datetime_t *dt) {
 		uart_default_tx_wait_blocking();
 		printf(buf);
 		gpio_put(PUMP_PIN, 1);
-		sleep_ms(activate_pump_ms);
+		sleep_ms(activate_pump_ms/2);
+		watchdog_update();
+		sleep_ms(activate_pump_ms/2);
 		gpio_put(PUMP_PIN, 0);
 	}
 	watchdog_update();
@@ -327,6 +339,10 @@ int main() {
 	gpio_init(RTC_WORK_DONE_PIN);
 	gpio_set_dir(RTC_WORK_DONE_PIN, GPIO_OUT);
 	gpio_put(RTC_WORK_DONE_PIN, 0);
+
+	gpio_init(EXT_POWER_PIN);
+	gpio_set_dir(EXT_POWER_PIN, GPIO_OUT);
+	gpio_put(EXT_POWER_PIN, 1);
 
 	gpio_init(PUMP_PIN);
 	gpio_set_dir(PUMP_PIN, GPIO_OUT);
