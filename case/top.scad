@@ -43,7 +43,7 @@ module rj45() {
     rj45_posz = top_depth - rj45[2] + 0.001;
     translate([rj45_posx, -thickness, rj45_posz]) cube(rj45);
 
-    translate([0, 8, rj45_posz]) rotate([0,0,90]) cube(rj45);
+    translate([0, 8.5, rj45_posz]) rotate([0,0,90]) cube(rj45);
     translate([0, 28, rj45_posz]) rotate([0,0,90]) cube(rj45);
 }
 
@@ -62,7 +62,7 @@ module debug_hole() {
 
 module led_hole() {
     led_posx = pcb_height + thickness;
-    led_posy = pcb_width - 14.5;
+    led_posy = pcb_width - 19;
     led_posz = top_depth - 0.99;
     translate([0, led_posy, led_posz]) rotate([0, -90, 0]) cube([1, 2, thickness]);
 }
@@ -80,10 +80,27 @@ module airvents() {
 }
 
 module uart() {
-    uart_posx = pcb_height - thickness - 2;
-    uart_posy = pcb_width - thickness - 10 - 15;
+    uart_posx = pcb_height - thickness + 1;
+    uart_posy = pcb_width - thickness - 50;
     translate([uart_posx, uart_posy, 0])
+    rotate([0, 0, 90])
         cube([3, 10, thickness]);
+}
+
+module usb_debug() {
+    usb_debug_posx = -thickness;
+    usb_debug_posy = pcb_width - thickness - 35 - 5;
+    usb_debug_posz = top_depth - 10 - 2;
+    translate([usb_debug_posx, usb_debug_posy, usb_debug_posz])
+        cube([thickness, 10, 5]);
+}
+
+module rtc_bat() {
+    rtc_bat_posx = 17;
+    rtc_bat_posy = pcb_width - 0.1;
+    rtc_bat_posz = top_depth - 5 + 0.1;
+    translate([rtc_bat_posx, rtc_bat_posy, rtc_bat_posz])
+        cube([10, thickness + 0.1, 5]);
 }
 
 difference () {
@@ -95,4 +112,6 @@ difference () {
     led_hole();
     airvents();
     uart();
+    usb_debug();
+    rtc_bat();
 }
