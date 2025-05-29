@@ -9,7 +9,7 @@ round_radius = 2;
 width = pcb_width + thickness * 2;	// y
 height = pcb_height + thickness * 2;	// x
 bottom_depth = 5;	// z
-top_depth = 20;		// z
+top_depth = 25;		// z
 
 screw_hole_radius = 1.6;	// M2/2
 screw_posx = 4.5;

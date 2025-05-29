@@ -20,13 +20,21 @@ module case () {
         translate(hole)
             cylinder(r=screw_hole_radius+2, h=top_depth);
         translate(hole)
-            cylinder(r=screw_hole_radius+4, h=6);
+            cylinder(r=screw_hole_radius+4, h=12);
     }
 
     translate([pcb_height+thickness, pcb_width-21, top_depth-2])
     rotate([90, 180, 90])
     linear_extrude(thickness/3)
     text("PicoWater", size=5);
+
+    // Internal battery holder
+    translate([35, 63, thickness])
+    cube([2, 25, 7.5]);
+    translate([33, 63, thickness+6])
+    cube([2, 25, 1.5]);
+    translate([0, 63, thickness+6])
+    cube([2, 25, 1.5]);
 }
 
 module screw_holes() {
@@ -34,7 +42,7 @@ module screw_holes() {
         translate([hole[0], hole[1], -thickness])
             cylinder(r=screw_hole_radius, h=top_depth+thickness+1.5);
         translate([hole[0], hole[1], -bottom_depth+thickness])
-            cylinder(r=3.5, h=bottom_depth-thickness+2.5);
+            cylinder(r=3.5, h=bottom_depth-thickness+9);
     }
 }
 
@@ -43,8 +51,8 @@ module rj45() {
     rj45_posz = top_depth - rj45[2] + 0.001;
     translate([rj45_posx, -thickness, rj45_posz]) cube(rj45);
 
-    translate([0, 8.5, rj45_posz]) rotate([0,0,90]) cube(rj45);
-    translate([0, 28, rj45_posz]) rotate([0,0,90]) cube(rj45);
+    translate([0, 9, rj45_posz]) rotate([0,0,90]) cube(rj45);
+    translate([0, 29, rj45_posz]) rotate([0,0,90]) cube(rj45);
 }
 
 module powerjack() {
@@ -70,7 +78,7 @@ module led_hole() {
 module airvents() {
     rad = 1;
     posx = pcb_height / 2 - (5*rad*3/2);
-    posy = pcb_width / 2 - 5*rad;
+    posy = pcb_width / 2 - 30;
     for (i = [0,1,2,3,4,5]) {
         for (j = [0,1,2,3,4,5]) {
             translate([posx + i*rad*3, posy + j*rad*3, 0])
@@ -89,14 +97,14 @@ module uart() {
 
 module usb_debug() {
     usb_debug_posx = -thickness;
-    usb_debug_posy = pcb_width - thickness - 35 - 5;
-    usb_debug_posz = top_depth - 10 - 2;
+    usb_debug_posy = pcb_width - thickness - 41;
+    usb_debug_posz = top_depth - 15;
     translate([usb_debug_posx, usb_debug_posy, usb_debug_posz])
-        cube([thickness, 10, 5]);
+        cube([thickness, 12, 5]);
 }
 
 module rtc_bat() {
-    rtc_bat_posx = 17;
+    rtc_bat_posx = 18;
     rtc_bat_posy = pcb_width - 0.1;
     rtc_bat_posz = top_depth - 5 + 0.1;
     translate([rtc_bat_posx, rtc_bat_posy, rtc_bat_posz])
