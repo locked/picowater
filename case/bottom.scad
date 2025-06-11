@@ -26,7 +26,7 @@ module screw_holes() {
             cylinder(r=screw_hole_radius+0.2, h=bottom_depth+thickness);
 
         translate([hole[0], hole[1], -bottom_depth+thickness])
-            cylinder(r=3, h=bottom_depth-thickness+3, $fn=6);
+            cylinder(r=3.3, h=bottom_depth-thickness+3, $fn=6);
     }
 }
 
