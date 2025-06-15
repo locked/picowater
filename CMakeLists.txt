@@ -29,6 +29,7 @@ pico_sdk_init()
 # Add executable
 add_executable(picowater picowater.cpp
 	pcf8563/pcf8563.c
+	mcp9808/mcp9808.c
 	network.c
 	tinyhttp/http.c
 	tinyhttp/header.c

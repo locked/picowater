@@ -12003,7 +12003,7 @@
 				)
 			)
 		)
-		(property "Value" "900K"
+		(property "Value" "200K"
 			(at 58.42 104.902 90)
 			(effects
 				(font
@@ -13773,7 +13773,7 @@
 				(justify right)
 			)
 		)
-		(property "Value" "200K"
+		(property "Value" "900K"
 			(at 70.104 107.95 0)
 			(effects
 				(font

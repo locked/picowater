@@ -5,7 +5,7 @@
 extern "C"{
 #endif 
 
-void network_update();
+int network_update();
 
 #ifdef __cplusplus
 }

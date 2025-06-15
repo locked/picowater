@@ -28,6 +28,7 @@
 #include "BMSPA_font.h"
 
 #include "pcf8563/pcf8563.h"
+#include "mcp9808/mcp9808.h"
 
 #include "network.h"
 
@@ -39,6 +40,8 @@ bool wakeup_everymin;
 
 int dist;
 float batlvl;
+float batlvl2;
+float systemp;
 
 
 void _i2c_init(i2c_inst_t* i2c, uint32_t sda, uint32_t scl, uint32_t baudrate) {
@@ -69,12 +72,16 @@ void blink(int count, int delay) {
 }
 
 
-void setup_screen(ssd1306_t *disp) {
+void setup_i2c() {
 	i2c_init(i2c1, 400000);
 	gpio_set_function(SCREEN_SDA_PIN, GPIO_FUNC_I2C);
 	gpio_set_function(SCREEN_SCL_PIN, GPIO_FUNC_I2C);
 	gpio_pull_up(SCREEN_SDA_PIN);
 	gpio_pull_up(SCREEN_SCL_PIN);
+}
+
+
+void setup_screen(ssd1306_t *disp) {
 	disp->external_vcc = false;
 	ssd1306_init(disp, 128, 64, 0x3C, i2c1);
 	ssd1306_clear(disp);
@@ -88,6 +95,7 @@ void setup_adc() {
 	adc_init();
 	// Make sure GPIO is high-impedance, no pullups etc
 	adc_gpio_init(BATTERY_ADC_PIN);
+	adc_gpio_init(BATTERY2_ADC_PIN);
 	adc_gpio_init(HUMIDITY_ADC_PIN);
 }
 
@@ -108,8 +116,8 @@ void setup_rtc_pcf() {
 	printf("[picoclock] pcf8563_set_i2c OK\r\n");
 
 	time_struct _dt = pcf8563_getDateTime();
-	if (_dt.century != 0 || (_dt.year < 24 || _dt.year > 28)) {
-		printf("[%d] %d-%d-%d %d:%d:%d\n", _dt.century, _dt.year, _dt.month, _dt.day, _dt.hour, _dt.min, _dt.sec);
+	if (!_dt.volt_low) {
+		printf("RTC not initialized [%d] %d-%d-%d %d:%d:%d\n", _dt.century, _dt.year, _dt.month, _dt.day, _dt.hour, _dt.min, _dt.sec);
 
 		// Fetch date
 		//network_update();
@@ -156,6 +164,7 @@ void rtc_pcf_sleep() {
 	pcf8563_enableAlarm();
 
 	// shutdown PI through SN74HC74N
+	blink(2, 500);
 	printf("SHUTDOWN\n");
 	uart_default_tx_wait_blocking();
 	sleep_ms(100);
@@ -214,26 +223,29 @@ int measure_distance() {
 }
 
 void add_water(datetime_t *dt) {
-	//blink(2, 100);
-	//sleep_ms(1000);
-
 	char buf[100] = "";
-	// Read Battery and Humidity ADCs
+	// Read Main Battery ADC
 	adc_select_input(0); // Select ADC input 0 (GPIO26)
 	const float conversion_factor = 3.3f / (1 << 12);
 	batlvl = adc_read() * conversion_factor;
-	adc_select_input(2); // Select ADC input 1 (GPIO28)
+
+	// Read Battery2 ADC
+	adc_select_input(1); // Select ADC input 1 (GPIO27)
+	batlvl2 = adc_read() * conversion_factor;
+
+	// Read Humidity ADC
+	/*adc_select_input(2); // Select ADC input 2 (GPIO28)
 	gpio_put(HUMIDITY_POWER_PIN, 1);
 	sleep_ms(10);
 	float humidity_result = adc_read() * conversion_factor;
 	gpio_put(HUMIDITY_POWER_PIN, 0);
-	sprintf(buf, "POUET ADC Battery:[%fV] Humidity:[%fV]\r\n", batlvl, humidity_result);
+	sprintf(buf, "ADC Battery:[%fV] Battery2:[%fV] Humidity:[%fV]\r\n", batlvl, batlvl2, humidity_result);
 	uart_puts(UART_ID, buf);
 	uart_default_tx_wait_blocking();
-	printf(buf);
+	printf(buf);*/
 
 	// Temperature
-	float temperature = 0;
+	systemp = mcp9808_get_temperature();
 
 	watchdog_update();
 	// Water level
@@ -290,12 +302,18 @@ void add_water(datetime_t *dt) {
 		blink(3, 100);
 		sleep_ms(1000);
 
-		network_update();
+		int network_rc = network_update();
 		watchdog_update();
 
-		printf("pump_force:[%d] wakeup_everymin:[%d] activate_pump_ms:[%d]\n", pump_force_ms, wakeup_everymin, activate_pump_ms);
-
-		if (pump_force_ms > 0) {
+		printf("wakeup_everymin:[%d] activate_pump_ms:[%d] network_rc:[%d]\n", wakeup_everymin, activate_pump_ms, network_rc);
+		if (network_rc > 0) {
+			// Network failed, check if manual failsafe necessary
+			activate_pump_ms = 0;
+			if ((dt->hour == 7 || dt->hour == 20) && batlvl > 2.9 && dist > 10) {
+				// It's time AND we have enough battery and water, activate pump
+				activate_pump_ms = 10000;
+			}
+		} else {
 			activate_pump_ms = pump_force_ms;
 		}
 	}
@@ -355,6 +373,9 @@ int main() {
 
 	gpio_pull_up(RTC_SQW_PIN);
 
+	// Setup I2C
+	setup_i2c();
+
 	//ssd1306_t disp;
 	//setup_screen(&disp);
 	//ssd1306_draw_line(&disp, 0, 0, 127, 0);
@@ -362,7 +383,7 @@ int main() {
 	//ssd1306_draw_string_with_font(&disp, 1, 1, 2, acme_font, buf);
 	//ssd1306_show(&disp);
 
-	watchdog_enable(30000, false);
+	watchdog_enable(10000, false);
 
 	// Setup humidity sensor
 	setup_humidity();

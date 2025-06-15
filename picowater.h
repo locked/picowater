@@ -9,6 +9,7 @@
 #define LED_PIN 0
 
 #define BATTERY_ADC_PIN 26   // 26 v0.9
+#define BATTERY2_ADC_PIN 27
 
 #define HUMIDITY_POWER_PIN 1 // 1  v0.9
 #define HUMIDITY_ADC_PIN 28  // 28 v0.9

@@ -15,6 +15,8 @@ extern int pump_force_ms;
 extern bool wakeup_everymin;
 extern int dist;
 extern float batlvl;
+extern float batlvl2;
+extern float systemp;
 
 
 int get_response_from_server(char *response) {
@@ -23,10 +25,11 @@ int get_response_from_server(char *response) {
 
 	time_struct dt = pcf8563_getDateTime();
 
-	char query[100];
-	sprintf(query, "GET /water.php?id=%s&dist=%d&batlvl=%f&date=%d-%d-%dT%d:%d HTTP/1.0\r\nContent-Length: 0\r\n\r\n", board_id, dist, batlvl, dt.year, dt.month, dt.day, dt.hour, dt.min);
+	char query[200];
+	//sprintf(query, "GET /water.php?id=%s&dist=%d&batlvl=%f&date=%d-%d-%dT%d:%d HTTP/1.0\r\nContent-Length: 0\r\n\r\n", board_id, dist, batlvl, dt.year, dt.month, dt.day, dt.hour, dt.min);
+	sprintf(query, "GET /water.php?id=%s&dist=%d&batlvl=%.2f&batlvl2=%.2f&systemp=%.1f&date=%d-%d-%dT%d:%d HTTP/1.0\r\nContent-Length: 0\r\n\r\n", board_id, dist, batlvl, batlvl2, systemp, dt.year, dt.month, dt.day, dt.hour, dt.min);
 	int ret = send_tcp(SERVER_IP, 80, query, strlen(query), response);
-	//printf("RESPONSE FROM SERVER ret:[%d] Server:[%s:%d] => [%s]\r\n", ret, SERVER_IP, atoi(SERVER_PORT), response);
+	//printf("RESPONSE FROM SERVER ret:[%d] Server:[%s] => [%s]\r\n", ret, SERVER_IP, response);
 	if (ret == 0 && strlen(response) < 10) {
 		ret = 1;
 	}
@@ -159,7 +162,7 @@ int parse_json_response(char *response) {
 }
 
 
-void network_update() {
+int network_update() {
     printf("Connecting to wifi [%s][%s]...\r\n", WIFI_SSID, WIFI_PASSWORD);
 	int ret = wifi_connect(WIFI_SSID, WIFI_PASSWORD);
     if (ret != 0) {
@@ -167,8 +170,10 @@ void network_update() {
 		printf("Failed, wait a bit and retry connecting to wifi [%s][%s]...\r\n", WIFI_SSID, WIFI_PASSWORD);
 		wifi_disconnect();
 		sleep_ms(1500);
+		watchdog_update();
 		ret = wifi_connect(WIFI_SSID, WIFI_PASSWORD);
 	}
+	watchdog_update();
     if (ret == 0) {
 		char http_buffer[4096] = "";
 		if (get_response_from_server(http_buffer) == 0) {
@@ -181,4 +186,5 @@ void network_update() {
 	printf("Disconnect...\r\n");
     wifi_disconnect();
     printf("Disconnected from wifi, ret:[%d]\r\n", ret);
+    return ret;
 }
