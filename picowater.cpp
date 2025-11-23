@@ -327,10 +327,13 @@ void add_water(datetime_t *dt) {
 		uart_puts(UART_ID, buf);
 		uart_default_tx_wait_blocking();
 		printf(buf);
+
 		gpio_put(PUMP_PIN, 1);
-		sleep_ms(activate_pump_ms/2);
-		watchdog_update();
-		sleep_ms(activate_pump_ms/2);
+		// Loop because we want to update watchdog every 500ms
+		for (int sum_ms = 0; sum_ms<activate_pump_ms; sum_ms+=500) {
+			sleep_ms(500);
+			watchdog_update();
+		}
 		gpio_put(PUMP_PIN, 0);
 	}
 	watchdog_update();

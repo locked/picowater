@@ -14209,7 +14209,7 @@
 	)
 	(symbol
 		(lib_id "Diode:1N4007")
-		(at 227.33 133.35 90)
+		(at 227.33 133.35 270)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -14218,25 +14218,25 @@
 		(fields_autoplaced yes)
 		(uuid "6772da81-9743-43a0-b94b-f86049d2f877")
 		(property "Reference" "D3"
-			(at 229.87 132.08 90)
+			(at 229.87 132.0799 90)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
-				(justify right)
+				(justify left)
 			)
 		)
 		(property "Value" "1N4007"
-			(at 229.87 134.62 90)
+			(at 229.87 134.6199 90)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
-				(justify right)
+				(justify left)
 			)
 		)
 		(property "Footprint" "Diode_SMD:D_SOD-123"
-			(at 231.775 133.35 0)
+			(at 222.885 133.35 0)
 			(effects
 				(font
 					(size 1.27 1.27)
