@@ -294,7 +294,7 @@ void add_water(datetime_t *dt) {
 		}
 	}*/
 
-	bool wakeup_everymin = false;
+	//bool wakeup_everymin = false;
 
 	// WIFI
 	bool enable_wifi = true;
@@ -417,8 +417,9 @@ int main() {
 		printf("sleep\n");
 		rtc_pcf_sleep();
 		sleep_ms(500);
-		printf("sleep done (should never be seen)\n");
-		//sleep_ms(10000);
+		uint32_t sleep_for = wakeup_everymin ? 60000 : 3600000;
+		printf("sleep done (should never be seen) => start work around with sleep(%d)\n", sleep_for);
+		sleep_ms(sleep_for);
 	}
 	return 0;
 }
